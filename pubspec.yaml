@@ -40,6 +40,7 @@ dependencies:
   intl: ^0.20.3
   syncfusion_flutter_calendar: ^34.2.6
   google_fonts: ^8.2.1
+  firebase_auth: ^6.7.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.1
