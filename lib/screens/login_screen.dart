@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../widgets/auth_widgets.dart';
 import 'register_screen.dart';
+import 'forgot_password_screen.dart';
 
 // [ l o g i n   s c r e e n ]
 // handles user sign in with email & password
@@ -116,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
               // (1) email field
               AuthTextField(
                 label: 'Email',
-                hint: 'yourname@gmail.com',
+                hint: 'yourname@example.com',
                 controller: _emailController,
                 enabled: !_isLoading,
                 keyboardType: TextInputType.emailAddress,
@@ -140,7 +141,31 @@ class _LoginScreenState extends State<LoginScreen> {
                 validator: AuthValidators.existingPassword,
               ),
 
-              //TODO: Forgot Password UI here
+              // forgot password link, right-aligned under the password field
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              // carry over what they already typed
+                              builder: (_) => ForgotPasswordScreen(
+                                initialEmail: _emailController.text.trim(),
+                              ),
+                            ),
+                          );
+
+                          // back on login: start the form fresh
+                          if (mounted) _resetForm();
+                        },
+                  child: const Text(
+                    'Forgot password?',
+                    style: TextStyle(color: Color(0xFF6B7F5E), fontSize: 13),
+                  ),
+                ),
+              ),
               const SizedBox(height: 10),
 
               // inline error banner

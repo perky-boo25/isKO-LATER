@@ -70,6 +70,7 @@ flutter:
       - assets/images/auth_bg.jpg
       - assets/images/logo.png
       - assets/images/app_title.png
+      - assets/images/ec.png
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
