@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
-import 'screens/home_screen.dart';
+import 'screens/auth_gate.dart';
 
 // entry point - setting up firebase before the app runs
 Future<void> main() async {
@@ -30,7 +30,7 @@ class IskoLaterApp extends StatelessWidget {
       ),
 
       //first screen to launch
-      home: const HomeScreen(),
+      home: const AuthGate(),
     );
   }
 }
