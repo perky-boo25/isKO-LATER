@@ -25,6 +25,9 @@ class AuthService {
   // grabing CURRENT USER snapshot
   User? get currentUser => _auth.currentUser;
 
+  // emits on auth state + profile edits (display name, email) so UI updates live
+  Stream<User?> get userChanges => _auth.userChanges();
+
   // [ R E G I S T E R]
   // create auth acc -> set username -> save to firestore
   Future<void> register({
@@ -62,7 +65,7 @@ class AuthService {
     } on FirebaseException {
       // edge case: auth passed but firestore write choked
       throw AuthException(
-        'Your account was created, but we could not save your profile.'
+        'Your account was created, but we could not save your profile. '
         'Please try logging in.',
       );
     }

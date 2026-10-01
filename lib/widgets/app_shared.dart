@@ -2,8 +2,48 @@ import 'package:flutter/material.dart';
 
 import '../screens/add_edit_task.dart';
 import '../screens/calendar_screen.dart';
+import '../services/auth_service.dart';
 
 enum AppTab { tasks, calendar }
+
+// [ l o g o u t   &   r e t u r n   t o   r o o t ]
+// prompts user confirmation, terminates session, and resets navigation stack
+Future<void> logoutAndReturnToRoot(BuildContext context) async {
+  // prompt logout confirmation dialog
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Log out?'),
+      actions: [
+        // dismiss dialog without signing out
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancel'),
+        ),
+        // confirm logout intention
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Log out'),
+        ),
+      ],
+    ),
+  );
+
+  // user cancelled or dismissed dialog
+  if (confirmed != true) return;
+
+  // guard async gap after dialog closure
+  if (!context.mounted) return;
+
+  // cache navigator reference before async signOut
+  final navigator = Navigator.of(context);
+
+  // sign out from firebase auth
+  await AuthService().logout();
+
+  // clear backstack and drop down to root gate route
+  navigator.popUntil((route) => route.isFirst);
+}
 
 class AppAddTaskFAB extends StatelessWidget {
   const AppAddTaskFAB({super.key});

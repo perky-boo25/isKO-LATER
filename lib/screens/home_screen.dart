@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
+import '../services/auth_service.dart';
 import '../models/task.dart';
 import '../services/firestore_service.dart';
 import '../widgets/task_card.dart';
@@ -78,55 +80,81 @@ class _HomeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      color: const Color(0xFFFCE8CB),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // [ h e a d e r   s t r e a m ]
+    // listen to live profile updates (e.g. display name edits)
+    return StreamBuilder<User?>(
+      stream: AuthService().userChanges,
+      initialData: AuthService().currentUser,
+      builder: (context, snapshot) {
+        // extract user's first name with fallback
+        final name = _firstName(snapshot.data);
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+
+          color: const Color(0xFFFCE8CB),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    _formattedDate(now).toUpperCase(),
-                    style: GoogleFonts.jetBrainsMono(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        _formattedDate(now).toUpperCase(),
+                        style: GoogleFonts.jetBrainsMono(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.star, size: 16),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.star, size: 16),
+
+                  //* TODO: TEMPORARY BUTTON if ever app user menu
+                  IconButton(
+                    tooltip: 'Log out',
+                    icon: const Icon(Icons.logout),
+                    onPressed: () => logoutAndReturnToRoot(context),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 5),
+
+              RichText(
+                text: TextSpan(
+                  style: GoogleFonts.dmSerifDisplay(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                  children: [
+                    TextSpan(text: _getGreeting()),
+                    TextSpan(
+                      text: '$name.',
+                      style: TextStyle(
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFFC65A42),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 5),
-
-          RichText(
-            text: TextSpan(
-              style: GoogleFonts.dmSerifDisplay(
-                fontSize: 30,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-              children: [
-                TextSpan(text: _getGreeting()),
-                TextSpan(
-                  text: 'Isk★.',
-                  style: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: Color(0xFFC65A42),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  // "Juan Dela Cruz" -> "Juan"; falls back if no name is set yet
+  String _firstName(User? user) {
+    final full = user?.displayName?.trim() ?? '';
+    if (full.isEmpty) return 'there';
+    return full.split(' ').first;
   }
 
   // Formats a date like "Monday, September 7, 2026"
