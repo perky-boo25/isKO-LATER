@@ -4,259 +4,462 @@ Author: Percie Louise Y. Samaniego
 
 **BOOGSH K.O. ka later!!**
 
-A simple to-do list app made for students who have **tasks everywhere and somehow still loves cramming**. Add a task, give it a due date and priority, organize it with a tag, check it off when you're finally done, and see everything laid out in a calendar.
+A simple to-do list app made for students who have **tasks everywhere and somehow still loves cramming**. Lab 1 gave it the task management stuff; Lab 2 adds **user accounts**, because apparently even procrastination needs to know who is procrastinating.
 
 Built with **Flutter + Firebase** — because apparently even procrastination needs cloud support.
 
-## Contents
-- [Tech Stack & Architecture](#tech-stack--architecture)
-- [Local Setup & Installation](#local-setup--installation)
-- [Data Operations (CRUD)](#data-operations-crud)
-- [Download the App](#download-the-app)
-- [Screenshots](#screenshots)
+> **Course:** CMSC 128 · **Branch:** `act2-accounts`
 
 ---
 
-## Tech Stack & Architecture
+## Contents
 
-IsKO-LATER keeps the setup relatively simple: **Flutter** handles the app itself, while **Firebase** takes care of storing and syncing the tasks.
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Local Setup & Installation](#local-setup--installation)
+- [Authentication](#authentication)
+- [Security](#security)
+- [Data Model](#data-model)
+- [Inspecting Accounts](#inspecting-accounts)
+- [Known Limitations](#known-limitations)
+- [Git Workflow](#git-workflow)
 
-- **Flutter (Dart)** — builds the UI and runs on Android/iOS from one codebase.
-- **Cloud Firestore** — stores tasks in the cloud. Since Firestore supports *live data streams*, the task list and calendar update automatically whenever a task is added, edited, or checked off — no manual refresh button needed.
-- **`syncfusion_flutter_calendar`** — powers the month-view calendar and its per-day task dots.
-- **`google_fonts` + `intl`** — used for custom fonts and cleaner date formatting (e.g. `Monday, September 7, 2026`).
+---
 
-### How everything connects
+## Features
+
+### Tasks (Lab 1)
+
+The original task features are still here:
+
+- Create, edit, complete, and soft-delete tasks (with undo)
+- Priority and tag per task
+- "Today" / "Upcoming" task grouping
+- Calendar view with a dot marker on days that have tasks
+
+### Accounts (Lab 2)
+
+Lab 2 adds the account side of the app:
+
+- **Register** with full name, email, and password
+- **Log in / Log out** with confirmation dialogs
+- **Persistent session** — stays logged in when the app is reopened
+- **Protected screens** — signed-out users only see the login flow
+- **Direct Tasks Landing** — logging in takes the user directly to the task list
+- **Profile Screen** — account dashboard accessible from the bottom navigation
+- **Inline Account Editing** — update the username and email directly from the profile
+- **Re-authentication** — changing the email requires the current password
+- **Email Verification** — waits for the verification link before completing an email change
+- **Verification Handoff** — after verification, the session ends and the user is redirected to login
+- **Forgot password** — sends a single-use reset link through email
+- Friendly validation and error messages
+- Loading spinners and disabled buttons while requests are processing
+
+So basically, Lab 1 handles **the tasks**, while Lab 2 handles **the person using the app**.
+
+---
+
+## Tech Stack
+
+| Layer | Choice |
+|---|---|
+| Frontend | Flutter (Dart), Material 3 |
+| Backend | Firebase (serverless, no custom server) |
+| Authentication | Firebase Authentication, Email/Password provider |
+| Database | Cloud Firestore |
+| Other packages | `firebase_core`, `firebase_auth`, `cloud_firestore`, `google_fonts`, `intl` |
+
+### Why Firebase Auth?
+
+Firebase handles the annoying security parts for us — password hashing, session tokens, and password reset flows.
+
+The app **does not see, store, or log password hashes**.
+
+Because apparently making our own authentication system from scratch was not enough suffering.
+
+---
+
+## Project Structure
 
 Here's the big picture before we dive into the individual parts:
 
-```mermaid
-flowchart TD
-    U[User]
-
-    subgraph APP["IsKO-LATER App"]
-        H[Home Screen]
-        C[ Calendar Screen]
-        F[Add/Edit Task]
-    end
-
-    S["firestore_service.dart"]
-
-    subgraph FIREBASE[" Firebase"]
-        DB[( Cloud Firestore)]
-        T["tasks collection"]
-    end
-
-    U --> H
-    U --> C
-    U --> F
-
-    H --> S
-    C --> S
-    F --> S
-
-    S --> DB
-    DB --> T
-
-    T -->|"live updates"| S
-    S -->|"streamTasks()"| H
-    S -->|"streamTasks()"| C
+```text
+lib/
+├── main.dart
+├── firebase_options.dart
+├── models/
+│   ├── task.dart
+│   └── user.dart
+├── services/
+│   ├── auth_service.dart
+│   └── firestore_service.dart
+├── screens/
+│   ├── auth_gate.dart
+│   ├── login_screen.dart
+│   ├── register_screen.dart
+│   ├── forgot_password_screen.dart
+│   ├── profile_screen.dart
+│   ├── home_screen.dart
+│   ├── calendar_screen.dart
+│   └── add_edit_task.dart
+└── widgets/
+    ├── auth_widgets.dart
+    ├── app_shared.dart
+    └── task_card.dart
 ```
 
-The important part is that the screens **do not communicate with Firestore directly**. They go through `firestore_service.dart`, which keeps the database logic in one place.
+The important part is that the screens don't handle everything themselves. Authentication logic stays in `auth_service.dart`, task database logic stays in `firestore_service.dart`, and the UI stays in the screens/widgets.
 
-### Task model
+Keeps everything from turning into one giant file of suffering.
 
-A task is the main piece of data moving around the app. Conceptually, it contains the information needed to display, organize, complete, and manage a task:
-
-```mermaid
-classDiagram
-    class Task {
-        +String id
-        +String title
-        +String description
-        +DateTime dueDate
-        +String priority
-        +String tag
-        +bool isDone
-        +DateTime createdAt
-        +DateTime deletedAt
-        +toMap()
-        +fromMap()
-    }
-
-    Task --> Firestore : stored as a document
-```
+---
 
 ## Local Setup & Installation
 
 ### You'll need
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install)
-- Android Studio or VS Code
-- A [Firebase project](https://console.firebase.google.com/)
-- Cloud Firestore enabled in your Firebase project
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) — stable channel
+- A Google account for Firebase
+- [Firebase CLI](https://firebase.google.com/docs/cli)
+- [FlutterFire CLI](https://firebase.google.com/docs/flutter/setup)
 
-### Setup
+Install FlutterFire CLI with:
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/perky-boo25/isKO-LATER.git
-cd isKO-LATER
-
-# 2. Install packages
-flutter pub get
-
-# 3. Connect it to your Firebase project
-# This creates firebase_options.dart
 dart pub global activate flutterfire_cli
+```
+
+### 1. Get the code
+
+```bash
+git clone <repository-url>
+cd isko_later
+git checkout act2-accounts
+flutter pub get
+```
+
+### 2. Connect it to Firebase
+
+Firebase configuration files contain project identifiers, so they are **not committed** to the repository.
+
+Create your own Firebase project first, then:
+
+1. Open the [Firebase Console](https://console.firebase.google.com) and create a project.
+2. Go to **Authentication → Sign-in method** and enable **Email/Password**.
+3. Go to **Firestore Database** and create a database.
+4. Go to **Firestore → Rules** and paste the contents of `firestore.rules`.
+5. Publish the rules.
+
+Or deploy them through:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+Then connect the Flutter project:
+
+```bash
+firebase login
 flutterfire configure
+```
 
-# 3. Connect to a simulator or your phone to view
+This creates `lib/firebase_options.dart` and the required platform configuration files locally.
 
+### 3. Run
+
+```bash
 flutter run
 ```
 
 That's it — pick a device/emulator when prompted and the app should launch.
 
-> **Note:** For local testing, set your Firestore rules to allow read/write. Tighten this before publishing anywhere real:
-> ```
-> allow read, write: if true;
-> ```
+No seed data or migrations are needed. The Firestore collections are created when the app writes to them for the first time.
 
 ---
 
-## Data Operations (CRUD)
+## Authentication
 
-All database logic lives in one place: `firestore_service.dart`.
+All authentication logic is handled through Firebase Authentication and kept in:
 
-The four basic database operations are **Create, Read, Update, and Delete** — or CRUD, because apparently even a to-do list needs its own acronym.
-
-### CRUD at a glance
-
-```mermaid
-flowchart TD
-    TASK["Task"]
-
-    TASK --> C["CREATE"]
-    TASK --> R["READ"]
-    TASK --> U["UPDATE"]
-    TASK --> D["DELETE"]
-
-    C --> C1["addTask()"]
-    C1 --> DB[(Cloud Firestore)]
-
-    R --> R1["streamTasks()"]
-    R1 --> DB
-
-    U --> U1["updateTask()"]
-    U --> U2["toggleTaskDone()"]
-    U1 --> DB
-    U2 --> DB
-
-    D --> D1["softDelete()"]
-    D1 --> D2["deletedAt = timestamp"]
-    D2 --> DB
+```text
+lib/services/auth_service.dart
 ```
 
-### What happens when you save a task?
+The screens call the service instead of dealing with Firebase Auth directly.
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Sheet as Add/Edit Task Sheet
-    participant Service as firestore_service.dart
-    participant DB as Firestore
-    participant Home as Home Screen (listening)
+### Register
 
-    User->>Sheet: Fill form, tap "Save task"
-    Sheet->>Service: addTask(task)
-    Service->>DB: taskRef.add(task.toMap())
-    DB-->>Home: snapshots() pushes updated list
-    Home-->>User: Task list redraws automatically
-```
+The user provides:
 
-That's also the reason behind the **instant update, no refresh** behavior.
+- Full name
+- Email
+- Password
+- Confirm password
 
-### Create — add a new task
+Firebase creates the authentication account, while the user's profile information is stored separately in Firestore.
+
+### Log in
+
+The app uses Firebase's email/password authentication:
 
 ```dart
-Future<void> addTask(Task task) async {
-  await _taskRef.add(task.toMap());
-}
+await FirebaseAuth.instance.signInWithEmailAndPassword(
+  email: email.trim(),
+  password: password,
+);
 ```
 
-### Read — a live list of tasks
+After a successful login, `AuthGate` detects the authenticated user and sends them directly to the task list.
 
-`streamTasks()` listens to Firestore instead of only fetching the tasks once. Whenever the collection changes, the stream provides the updated list.
+No unnecessary welcome screen. Straight to the procrastination.
+
+### Persistent Session
+
+The app listens to:
 
 ```dart
-Stream<List<Task>> streamTasks() {
-  return _taskRef
-      .where('deletedAt', isNull: true)
-      .orderBy('createdAt', descending: true)
-      .snapshots()
-      .map((snapshot) => snapshot.docs
-          .map((doc) => Task.fromMap(doc.id, doc.data() as Map<String, dynamic>))
-          .toList());
-}
+FirebaseAuth.authStateChanges()
 ```
 
-### Update — edit or complete a task
+When the app starts, Firebase checks the saved session.
 
-Editing a task updates its existing Firestore document:
+- If a user exists → show the app
+- If there is no user → show the login screen
+
+This is why the user doesn't have to log in again every time the app is reopened.
+
+Firebase also refreshes the authentication token when needed.
+
+### Log out
+
+When the user chooses to log out:
 
 ```dart
-Future<void> updateTask(Task task) async {
-  await _taskRef.doc(task.id).update(task.toMap());
-}
+signOut()
 ```
 
-Checking a task off simply switches its `isDone` value:
+clears the current session.
 
-```dart
-Future<void> toggleTaskDone(Task task) async {
-  await _taskRef.doc(task.id).update({'isDone': !task.isDone});
-}
+The app then returns to the login screen. A confirmation dialog is shown first so the user doesn't accidentally yeet themselves out of their account.
+
+### Forgot Password
+
+From the login screen, the user can tap **Forgot password?** and enter their email.
+
+The flow is:
+
+```text
+Forgot password?
+      ↓
+Enter email
+      ↓
+Firebase
+      ↓
+Reset link sent
+      ↓
+User opens link
+      ↓
+New password
 ```
 
-### Delete — hide instead of permanently removing
+The reset link is **single-use and time-limited**, and the app never sees the new password.
 
-IsKO-LATER uses a **soft delete**. Instead of completely erasing a task, `softDelete()` adds a `deletedAt` timestamp.
+The confirmation message is also kept generic so the screen doesn't reveal whether an email is registered.
 
-```dart
-Future<void> softDelete(Task task) async {
-  await _taskRef.doc(task.id).update({'deletedAt': FieldValue.serverTimestamp()});
-}
+### Update Email
+
+Changing the email needs a few extra steps:
+
+```text
+Profile
+   ↓
+Edit email
+   ↓
+Enter current password
+   ↓
+Re-authenticate
+   ↓
+Verification link sent
+   ↓
+User opens link
+   ↓
+App checks verification
+   ↓
+Session ends
+   ↓
+Login with new email
 ```
 
-The active task stream filters out anything with a `deletedAt` value, so deleted tasks disappear from the normal list while the data is still retained for an **Undo/recovery flow**.
+The app checks whether the verification has been completed when the app is resumed.
+
+Once the email is verified, the current session ends and the user is redirected to login with the new email pre-filled.
+
+A little more work than changing a name, but that's kind of the point.
 
 ---
 
-## Download the App
+## Security
 
-📱 [**Get the installable app here**](https://drive.google.com/file/d/1A5L-Vb8Tzh9SS9rfBxjSLjtxlF1Nu9F2/view?usp=drive_link)
+A few things are handled by Firebase instead of the app itself.
 
-**NOTE: This is made for android only and download at your own risk.**
+### Password Storage
 
-*(Android may ask you to allow "install from unknown sources" — that's expected for an APK shared outside the Play Store.)*
+Firebase handles password hashing on its servers.
+
+The app:
+
+- does not store plaintext passwords
+- does not store password hashes
+- does not log passwords
+- does not display passwords
+
+### Re-authentication
+
+Changing the email requires the current password first.
+
+This adds another check before making a sensitive account change.
+
+### Login Errors
+
+Invalid credentials use a generic error message instead of telling the user whether the email exists.
+
+This prevents the login screen from accidentally leaking account information.
+
+### Firestore Rules
+
+Firestore rules control database access instead of relying only on the UI.
+
+The rules are stored in:
+
+```text
+firestore.rules
+```
+
+### Configuration Files
+
+Firebase configuration files and other secrets are kept out of the repository through `.gitignore`.
 
 ---
 
-## Screenshots
+## Data Model
 
-### Home Screen =(Task List)
+### Firebase Authentication
 
-![Home Screen](screenshots/homeScreen_TaskList.jpg)
+Firebase manages the actual login credentials:
 
-### Add/Edit Modal
+- Email
+- Password hash
+- UID
+- Created time
+- Last sign-in time
 
-![Add/Edit Task](screenshots/Add_Edit_modal.jpg)
+### Firestore `users/{uid}`
 
-### Calendar view
+Each user gets a profile document using their Firebase UID.
 
-![Calendar View](screenshots/Calendar.jpg)
+| Field | Type | Notes |
+|---|---|---|
+| `email` | string | user's current email |
+| `displayName` | string | shown in the profile |
+| `createdAt` | timestamp | set during registration |
+
+### Firestore `tasks/{taskId}`
+
+The task data from Lab 1 is still used:
+
+- title
+- due date/time
+- priority
+- tag
+- done status
+- deleted status
+
+---
+
+## Inspecting Accounts
+
+If we need to check whether the authentication system is actually doing its job:
+
+### Firebase Authentication
+
+Go to:
+
+**Firebase Console → Authentication → Users**
+
+This shows:
+
+- Identifier
+- UID
+- Created date
+- Last sign-in date
+
+It does **not** show the actual password.
+
+### Firestore
+
+Go to:
+
+**Firebase Console → Firestore → `users`**
+
+The profile documents should contain:
+
+- `email`
+- `displayName`
+- `createdAt`
+
+### Exporting Accounts
+
+For demonstration purposes, Firebase CLI can export account data:
+
+```bash
+firebase auth:export accounts.json --format=json
+```
+
+The exported records contain a `passwordHash` and `salt` instead of a plaintext password.
+
+**Don't commit this file.**
+
+---
+
+## Known Limitations
+
+There are still a few things that aren't handled yet:
+
+- Tasks are **not scoped per user**, so every signed-in account currently sees the same task list.
+- Authentication is **email/password only**.
+- There is no Google sign-in or multi-factor authentication yet.
+- Changing the email depends on the verification link before the new email becomes active in the profile.
+
+So yes, accounts work now, but the tasks are still basically saying:
+
+> *"Everyone gets to see the same procrastination."*
+
+---
+
+## Git Workflow
+
+The work was done on the:
+
+```text
+act2-accounts
+```
+
+branch.
+
+Each step was committed separately using conventional commit prefixes:
+
+- `feat`
+- `fix`
+- `style`
+- `docs`
+- `chore`
+
+Final commit:
+
+```text
+cmsc128-Indiv-Act2
+```
 
 ---
 
