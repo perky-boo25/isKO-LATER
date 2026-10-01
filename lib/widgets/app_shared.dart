@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../screens/add_edit_task.dart';
 import '../screens/calendar_screen.dart';
 import '../services/auth_service.dart';
+import '../screens/profile_screen.dart';
 
-enum AppTab { tasks, calendar }
+enum AppTab { tasks, calendar, profile }
 
 // [ l o g o u t   &   r e t u r n   t o   r o o t ]
 // prompts user confirmation, terminates session, and resets navigation stack
@@ -96,6 +97,20 @@ class AppBottomNav extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const CalendarScreen()),
+                );
+              },
+            ),
+            _NavItem(
+              icon: Icons.person_outline,
+              label: 'Profile',
+              selected: currentTab == AppTab.profile,
+              onTap: () {
+                if (currentTab == AppTab.profile) return;
+
+                // Push the Profile screen instead of popping to root
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
                 );
               },
             ),
