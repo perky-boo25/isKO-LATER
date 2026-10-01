@@ -91,17 +91,15 @@ class AuthHeader extends StatelessWidget {
     return Column(
       children: [
         Image.asset(
-          'assets/images/logo.png',
-          height: 80,
-          errorBuilder: (_, _, _) => const SizedBox(height: 80),
+          'assets/images/app_title.png', // Path to your title image
+          height: 100, // Adjust height to match previous font size
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => const SizedBox(height: 32),
         ),
-        const SizedBox(height: 6),
+
         Text(
-          'IsKO-LATER',
-          style: GoogleFonts.dmSerifDisplay(
-            fontSize: 28,
-            color: const Color(0xFF4A3427),
-          ),
+          'mastering the art of mamaya na',
+          style: GoogleFonts.specialElite(fontSize: 16),
         ),
       ],
     );

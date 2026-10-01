@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/user.dart';
 
@@ -30,6 +31,8 @@ class AuthService {
 
   // [ R E G I S T E R]
   // create auth acc -> set username -> save to firestore
+  // if the profile save fails, the auth account is deleted again, so a failed
+  // sign up never leaves anyone logged in (and AuthGate never shows Home)
   Future<void> register({
     required String userName,
     required String email,
@@ -39,16 +42,21 @@ class AuthService {
     final cleanName = userName.trim();
     final cleanEmail = email.trim();
 
+    // step 1: create the auth account (this also signs the user in)
+    final UserCredential credential;
     try {
-      // make auth record (autochecks for duplicate email)
-      final credential = await _auth.createUserWithEmailAndPassword(
+      credential = await _auth.createUserWithEmailAndPassword(
         email: cleanEmail,
         password: password,
       );
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_messageFor(e));
+    }
 
-      final user = credential.user!;
+    final user = credential.user!;
 
-      // update auth profile name
+    // step 2: save the name + profile. If ANYTHING fails here, undo step 1
+    try {
       await user.updateDisplayName(cleanName);
 
       // sync profile doc to db
@@ -58,15 +66,20 @@ class AuthService {
         userName: cleanName,
         createdAt: DateTime.now(),
       );
-
       await _userRef.doc(user.uid).set(appUser.toMap());
-    } on FirebaseAuthException catch (e) {
-      throw AuthException(_messageFor(e));
-    } on FirebaseException {
-      // edge case: auth passed but firestore write choked
+    } catch (e) {
+      debugPrint('Profile save failed, rolling back: $e');
+
+      // deleting the account also signs the user out;
+      // if the delete itself fails, at least sign out
+      try {
+        await user.delete();
+      } catch (_) {
+        await _auth.signOut();
+      }
+
       throw AuthException(
-        'Your account was created, but we could not save your profile. '
-        'Please try logging in.',
+        'We could not finish creating your account. Please try again.',
       );
     }
   }
@@ -88,6 +101,19 @@ class AuthService {
   // clears session
   Future<void> logout() async {
     await _auth.signOut();
+  }
+
+  // [ p a s s w o r d   r e s e t ]
+  // sends single-use reset link via firebase hosted email flow
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (e) {
+      // account enumeration protection: silently absorb missing user errors
+      // prevents leaking whether an email exists in the database
+      if (e.code == 'user-not-found') return;
+      throw AuthException(_messageFor(e));
+    }
   }
 
   // translate firebase error codes to human-readable text

@@ -93,20 +93,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 32),
 
                 // page title
-                Text(
-                  'Create you account',
-                  style: GoogleFonts.dmSerifDisplay(
-                    fontSize: 28,
-                    color: Color(0xFF4A3427),
+                Center(
+                  child: Text(
+                    'Create an account',
+                    style: GoogleFonts.poppins(
+                      fontSize: 28,
+                      fontWeight: FontWeight(700),
+                      color: Color(0xFF4A3427),
+                    ),
                   ),
                 ),
-
                 const SizedBox(height: 24),
 
                 // (1) full name field
                 AuthTextField(
-                  label: 'Full name',
-                  hint: 'Juan de la Cruz',
+                  label: 'Username ',
+                  hint: 'Enter your name',
                   controller: _nameController,
                   enabled: !_isLoading,
                   keyboardType: TextInputType.name,
@@ -119,13 +121,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // (2) email field
                 AuthTextField(
                   label: 'Email',
-                  hint: 'yourname@example.com',
+                  hint: 'Enter your email',
                   controller: _emailController,
                   enabled: !_isLoading,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
                   autofillHints: const [AutofillHints.email],
-                  validator: AuthValidators.newPassword,
+                  validator: AuthValidators.email,
                 ),
 
                 const SizedBox(height: 16),
@@ -173,11 +175,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 20),
 
-                // link back to sign-in screen
-                AuthSwitchLink(
-                  prompt: 'Already have an account?',
-                  action: 'Log in',
-                  onTap: _isLoading ? null : () => Navigator.of(context).pop(),
+                Center(
+                  child:
+                      //link back to sign-in screen
+                      AuthSwitchLink(
+                        prompt: 'Already have an account?',
+                        action: 'Log in',
+                        onTap: _isLoading
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                      ),
                 ),
               ],
             ),

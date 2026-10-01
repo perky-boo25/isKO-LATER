@@ -35,6 +35,12 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // clears typed text, red validation messages, and the error banner
+  void _resetForm() {
+    _formKey.currentState?.reset();
+    setState(() => _errorMessage = null);
+  }
+
   // [ s u b m i t ]
   //validate inputs -> sign in via firebase
   Future<void> _submit() async {
@@ -76,28 +82,35 @@ class _LoginScreenState extends State<LoginScreen> {
         autovalidateMode: AutovalidateMode.onUserInteraction,
         child: AutofillGroup(
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // logo header
               const Center(child: AuthHeader()),
               const SizedBox(height: 32),
 
-              // page title & subtitle
-              Text(
-                'Welcome back',
-                style: GoogleFonts.dmSerifDisplay(
-                  fontSize: 28,
-                  color: Color(0xFF4A3427),
+              // page title & subtitle (Centered)
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      'Welcome back',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF4A3427),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Stay on top of what matters',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Color(0xFF4A3427)),
+                    ),
+                  ],
                 ),
               ),
-
-              const SizedBox(height: 4),
-
-              Text(
-                'Stay on top of what matters',
-                style: TextStyle(color: Color(0xFF4A3427)),
-              ),
-
               const SizedBox(height: 24),
 
               // (1) email field
@@ -117,7 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
               // (2) password field with hide and show toggle
               AuthTextField(
                 label: 'Password',
-                hint: 'Enter your Password',
+                hint: 'Enter Password',
                 controller: _passwordController,
                 isPassword: true,
                 enabled: !_isLoading,
@@ -128,14 +141,14 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
 
               //TODO: Forgot Password UI here
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
 
               // inline error banner
               AuthErrorBanner(message: _errorMessage),
 
               //login submission button
               AuthPrimaryButton(
-                label: 'Log in',
+                label: 'Login',
                 isLoading: _isLoading,
                 onPressed: _submit,
               ),
@@ -143,16 +156,23 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 20),
 
               // link to redirect to registration screen
-              AuthSwitchLink(
-                prompt: 'New here?',
-                action: 'Sign up',
-                onTap: _isLoading
-                    ? null
-                    : () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const RegisterScreen(),
-                        ),
-                      ),
+              Center(
+                child: AuthSwitchLink(
+                  prompt: "Don't have an account?",
+                  action: 'Sign up',
+                  onTap: _isLoading
+                      ? null
+                      : () async {
+                          // wait here until the user comes back from Register
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const RegisterScreen(),
+                            ),
+                          );
+                          // back on login: start the form fresh
+                          if (mounted) _resetForm();
+                        },
+                ),
               ),
             ],
           ),
