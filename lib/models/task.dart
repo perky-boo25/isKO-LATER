@@ -7,7 +7,10 @@ enum TaskTags { school, personal, others }
 // data model - needed for one task/ to-do item
 class Task {
   final String id;
+  // [act3: adding foreign keys]
+  // ownerId links this task to users/{uid} (who created/owns this task)
   final String ownerId;
+  // listId is null for Personal tasks, or references todo_lists/{listId} for Collaborative tasks
   final String? listId;
   final String title;
   final DateTime dueDateTime;
@@ -21,6 +24,7 @@ class Task {
   //constructor - builds a task
   Task({
     required this.id,
+    // required at compile time so a task can never be created without an owner
     required this.ownerId,
     this.listId,
     required this.title,
@@ -36,6 +40,7 @@ class Task {
   // task -> Map so it can be written to Firestore
   Map<String, dynamic> toMap() {
     return {
+      // persist ownerId and listId in Firestore for ubac query filtering & security rules
       'ownerId': ownerId,
       'listId': listId,
       'title': title,
@@ -45,7 +50,9 @@ class Task {
       'isDone': isDone,
       'createdAt': Timestamp.fromDate(createdAt),
       'deletedAt': deletedAt != null ? Timestamp.fromDate(deletedAt!) : null,
-      'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+      'completedAt': completedAt != null
+          ? Timestamp.fromDate(completedAt!)
+          : null,
     };
   }
 
@@ -53,6 +60,7 @@ class Task {
   factory Task.fromMap(String id, Map<String, dynamic> map) {
     return Task(
       id: id,
+      // fallback to empty string if reading legacy pre-ubac documents
       ownerId: map['ownerId'] as String? ?? '',
       listId: map['listId'] as String?,
       title: map['title'] as String,
@@ -83,6 +91,7 @@ class Task {
   }) {
     return Task(
       id: id,
+      // preserve existing ownerId and listId unless explicitly overridden
       ownerId: ownerId ?? this.ownerId,
       listId: clearListId ? null : (listId ?? this.listId),
       title: title ?? this.title,
