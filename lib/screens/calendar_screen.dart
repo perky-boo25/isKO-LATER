@@ -1,8 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 
 import '../models/task.dart';
+import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../widgets/task_card.dart';
 import '../widgets/app_shared.dart';
@@ -30,42 +32,53 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFFFF8EF),
+      backgroundColor: const Color(0xFFFFF8EF),
       body: SafeArea(
-        child: StreamBuilder<List<Task>>(
-          // reuses the same live, non-deleted task stream as home_screen
-          stream: FirestoreService().streamTasks(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return Center(
-                child: Text('Error loading tasks: ${snapshot.error}'),
-              );
-            }
+        // [ act3: u b a c   s e s s i o n - s c o p e d   c a l e n d a r ]
+        // rebuilds the task StreamBuilder when the active user changes
+        // so calendar dots and daily tasks are strictly scoped to currentUser
+        child: StreamBuilder<User?>(
+          stream: AuthService().authStateChanges,
+          initialData: AuthService().currentUser,
+          builder: (context, authSnap) {
+            final uid = authSnap.data?.uid;
+            return StreamBuilder<List<Task>>(
+              key: ValueKey(uid),
+              // reuses the same live, non-deleted task stream as home_screen
+              stream: FirestoreService().streamTasks(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text('Error loading tasks: ${snapshot.error}'),
+                  );
+                }
 
-            final tasks = snapshot.data ?? [];
+                final tasks = snapshot.data ?? [];
 
-            // grouped by day, used to filter the list under the calendar
-            final Map<DateTime, List<Task>> tasksByDay = {};
-            for (final t in tasks) {
-              final key = _dayOnly(t.dueDateTime);
-              tasksByDay.putIfAbsent(key, () => []).add(t);
-            }
+                // grouped by day, used to filter the list under the calendar
+                final Map<DateTime, List<Task>> tasksByDay = {};
+                for (final t in tasks) {
+                  final key = _dayOnly(t.dueDateTime);
+                  tasksByDay.putIfAbsent(key, () => []).add(t);
+                }
 
-            final selectedTasks = _withDoneAtBottom(
-              tasksByDay[_dayOnly(_selectedDay)] ?? [],
-            );
+                final selectedTasks = _withDoneAtBottom(
+                  tasksByDay[_dayOnly(_selectedDay)] ?? [],
+                );
 
-            return Column(
-              children: [
-                _buildHeader(),
-                const SizedBox(height: 16),
-                _buildCalendar(tasks),
-                const SizedBox(height: 8),
-                Expanded(child: _buildTaskList(selectedTasks)),
-              ],
+                return Column(
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 16),
+                    _buildCalendar(tasks),
+                    const SizedBox(height: 8),
+                    Expanded(child: _buildTaskList(selectedTasks)),
+                  ],
+                );
+              },
             );
           },
         ),
@@ -127,10 +140,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
         viewHeaderStyle: const ViewHeaderStyle(
           dayTextStyle: TextStyle(color: Colors.grey, fontSize: 12),
         ),
-        todayHighlightColor: Color(0xFFE8873A),
+        todayHighlightColor: const Color(0xFFE8873A),
         selectionDecoration: BoxDecoration(
-          color: Color(0xFF4A3427).withValues(alpha: 0.08),
-          border: Border.all(color: Color(0xFF4A3427), width: 1.5),
+          color: const Color(0xFF4A3427).withValues(alpha: 0.08),
+          border: Border.all(color: const Color(0xFF4A3427), width: 1.5),
           borderRadius: BorderRadius.circular(8),
         ),
         monthViewSettings: const MonthViewSettings(
@@ -243,7 +256,7 @@ class _TaskDataSource extends CalendarDataSource {
       case Priority.high:
         return Colors.pinkAccent;
       case Priority.medium:
-        return Color(0xFFE8873A);
+        return const Color(0xFFE8873A);
       case Priority.low:
         return Colors.blueAccent;
     }

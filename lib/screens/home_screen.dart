@@ -23,27 +23,38 @@ class HomeScreen extends StatelessWidget {
           children: [
             const _HomeHeader(),
 
-            // Show the list if we have tasks, otherwise show the empty state
+            // [ act3: u b a c   s e s s i o n - s c o p e d   s t r e a m ]
+            // listen to authStateChanges and key the task StreamBuilder by uid
+            // so logging out of Account A and into Account B immediately resets
+            // the stream and shows only Account B's tasks
             Expanded(
-              child: StreamBuilder<List<Task>>(
-                stream: FirestoreService().streamTasks(),
-                builder: (context, snapshot) {
-                  //Firestore initial response
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(child: CircularProgressIndicator());
-                  }
+              child: StreamBuilder<User?>(
+                stream: AuthService().authStateChanges,
+                initialData: AuthService().currentUser,
+                builder: (context, authSnap) {
+                  final uid = authSnap.data?.uid;
+                  return StreamBuilder<List<Task>>(
+                    key: ValueKey(uid),
+                    stream: FirestoreService().streamTasks(),
+                    builder: (context, snapshot) {
+                      // Firestore initial response
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                  //if something is wrong from Firestore
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Text('Error loading tasks: ${snapshot.error}'),
-                    );
-                  }
+                      // if something is wrong from Firestore
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text('Error loading tasks: ${snapshot.error}'),
+                        );
+                      }
 
-                  final tasks = snapshot.data ?? [];
-                  return tasks.isEmpty
-                      ? const _EmptyState()
-                      : _TaskList(tasks: tasks);
+                      final tasks = snapshot.data ?? [];
+                      return tasks.isEmpty
+                          ? const _EmptyState()
+                          : _TaskList(tasks: tasks);
+                    },
+                  );
                 },
               ),
             ),
@@ -113,13 +124,6 @@ class _HomeHeader extends StatelessWidget {
                       const Icon(Icons.star, size: 16),
                     ],
                   ),
-
-                  //* TODO: TEMPORARY BUTTON if ever app user menu
-                  IconButton(
-                    tooltip: 'Log out',
-                    icon: const Icon(Icons.logout),
-                    onPressed: () => logoutAndReturnToRoot(context),
-                  ),
                 ],
               ),
               const SizedBox(height: 5),
@@ -135,7 +139,7 @@ class _HomeHeader extends StatelessWidget {
                     TextSpan(text: _getGreeting()),
                     TextSpan(
                       text: '$name.',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontStyle: FontStyle.italic,
                         color: Color(0xFFC65A42),
                       ),
