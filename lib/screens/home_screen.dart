@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../models/task.dart';
 import '../services/firestore_service.dart';
+import '../services/todo_list_service.dart';
+import '../widgets/list_switcher_bar.dart';
 import '../widgets/task_card.dart';
 import '../widgets/app_shared.dart';
 import 'add_edit_task.dart';
@@ -33,27 +35,52 @@ class HomeScreen extends StatelessWidget {
                 initialData: AuthService().currentUser,
                 builder: (context, authSnap) {
                   final uid = authSnap.data?.uid;
-                  return StreamBuilder<List<Task>>(
-                    key: ValueKey(uid),
-                    stream: FirestoreService().streamTasks(),
-                    builder: (context, snapshot) {
-                      // Firestore initial response
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
+                  return Column(
+                    children: [
+                      // [ c o l l a b o r a t i v e   l i s t   s w i t c h e r ]
+                      // Placed in the main body above the task list
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                        child: ListSwitcherBar(currentUid: uid ?? ''),
+                      ),
 
-                      // if something is wrong from Firestore
-                      if (snapshot.hasError) {
-                        return Center(
-                          child: Text('Error loading tasks: ${snapshot.error}'),
-                        );
-                      }
+                      Expanded(
+                        child: ValueListenableBuilder<String?>(
+                          valueListenable: activeListId,
+                          builder: (context, selectedListId, _) {
+                            return StreamBuilder<List<Task>>(
+                              key: ValueKey('${uid}_$selectedListId'),
+                              stream: FirestoreService().streamTasks(
+                                listId: selectedListId,
+                              ),
+                              builder: (context, snapshot) {
+                                // Firestore initial response
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                }
 
-                      final tasks = snapshot.data ?? [];
-                      return tasks.isEmpty
-                          ? const _EmptyState()
-                          : _TaskList(tasks: tasks);
-                    },
+                                // if something is wrong from Firestore
+                                if (snapshot.hasError) {
+                                  return Center(
+                                    child: Text(
+                                      'Error loading tasks: ${snapshot.error}',
+                                    ),
+                                  );
+                                }
+
+                                final tasks = snapshot.data ?? [];
+                                return tasks.isEmpty
+                                    ? const _EmptyState()
+                                    : _TaskList(tasks: tasks);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),

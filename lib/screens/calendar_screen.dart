@@ -6,6 +6,7 @@ import 'package:syncfusion_flutter_calendar/calendar.dart';
 import '../models/task.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/todo_list_service.dart';
 import '../widgets/task_card.dart';
 import '../widgets/app_shared.dart';
 import 'add_edit_task.dart';
@@ -34,49 +35,56 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF8EF),
       body: SafeArea(
-        // [ act3: u b a c   s e s s i o n - s c o p e d   c a l e n d a r ]
-        // rebuilds the task StreamBuilder when the active user changes
-        // so calendar dots and daily tasks are strictly scoped to currentUser
+        // [ act3:   s e s s i o n - &   l i s t - s c o p e d   c a l e n d a r ]
+        // rebuilds the task StreamBuilder when either the active user OR the
+        // selected list (Personal vs Collaborative) changes
         child: StreamBuilder<User?>(
           stream: AuthService().authStateChanges,
           initialData: AuthService().currentUser,
           builder: (context, authSnap) {
             final uid = authSnap.data?.uid;
-            return StreamBuilder<List<Task>>(
-              key: ValueKey(uid),
-              // reuses the same live, non-deleted task stream as home_screen
-              stream: FirestoreService().streamTasks(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Error loading tasks: ${snapshot.error}'),
-                  );
-                }
+            return ValueListenableBuilder<String?>(
+              valueListenable: activeListId,
+              builder: (context, selectedListId, _) {
+                return StreamBuilder<List<Task>>(
+                  key: ValueKey('${uid}_$selectedListId'),
+                  // streams either Personal tasks (null) or Collaborative list tasks
+                  stream: FirestoreService().streamTasks(
+                    listId: selectedListId,
+                  ),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text('Error loading tasks: ${snapshot.error}'),
+                      );
+                    }
 
-                final tasks = snapshot.data ?? [];
+                    final tasks = snapshot.data ?? [];
 
-                // grouped by day, used to filter the list under the calendar
-                final Map<DateTime, List<Task>> tasksByDay = {};
-                for (final t in tasks) {
-                  final key = _dayOnly(t.dueDateTime);
-                  tasksByDay.putIfAbsent(key, () => []).add(t);
-                }
+                    // grouped by day, used to filter the list under the calendar
+                    final Map<DateTime, List<Task>> tasksByDay = {};
+                    for (final t in tasks) {
+                      final key = _dayOnly(t.dueDateTime);
+                      tasksByDay.putIfAbsent(key, () => []).add(t);
+                    }
 
-                final selectedTasks = _withDoneAtBottom(
-                  tasksByDay[_dayOnly(_selectedDay)] ?? [],
-                );
+                    final selectedTasks = _withDoneAtBottom(
+                      tasksByDay[_dayOnly(_selectedDay)] ?? [],
+                    );
 
-                return Column(
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 16),
-                    _buildCalendar(tasks),
-                    const SizedBox(height: 8),
-                    Expanded(child: _buildTaskList(selectedTasks)),
-                  ],
+                    return Column(
+                      children: [
+                        _buildHeader(),
+                        const SizedBox(height: 16),
+                        _buildCalendar(tasks),
+                        const SizedBox(height: 8),
+                        Expanded(child: _buildTaskList(selectedTasks)),
+                      ],
+                    );
+                  },
                 );
               },
             );

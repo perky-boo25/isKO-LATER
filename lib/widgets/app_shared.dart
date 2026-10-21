@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../screens/add_edit_task.dart';
 import '../screens/calendar_screen.dart';
 import '../services/auth_service.dart';
+import '../services/todo_list_service.dart';
 import '../screens/profile_screen.dart';
 
 enum AppTab { tasks, calendar, profile }
@@ -39,6 +40,11 @@ Future<void> logoutAndReturnToRoot(BuildContext context) async {
   // cache navigator reference before async signOut
   final navigator = Navigator.of(context);
 
+  // [ act3: r e s e t   a c t i v e   l i s t ]
+  // reset active list selection back to Personal (null) before ending session
+  // so the next user who logs in never inherits a previous user's list selection
+  activeListId.value = null;
+
   // sign out from firebase auth
   await AuthService().logout();
 
@@ -74,7 +80,7 @@ class AppBottomNav extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        color: Color(0xFFFCE8CB),
+        color: const Color(0xFFFCE8CB),
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -142,13 +148,13 @@ class _NavItem extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? Color(0xFFF1DDBE) : Colors.transparent,
+          color: selected ? const Color(0xFFF1DDBE) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Color(0xFF4A3427)),
+            Icon(icon, color: const Color(0xFF4A3427)),
             const SizedBox(height: 4),
             Text(
               label,

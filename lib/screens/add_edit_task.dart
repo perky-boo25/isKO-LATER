@@ -3,6 +3,7 @@ import 'package:isko_later/services/firestore_service.dart';
 
 import '../models/task.dart';
 import '../services/auth_service.dart';
+import '../services/todo_list_service.dart';
 
 Future<void> showAddEditTaskSheet(BuildContext context, {Task? existingTask}) {
   return showModalBottomSheet<void>(
@@ -153,7 +154,7 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
 
     try {
       if (_isEditing) {
-        // copyWith preserves the original ownerId so ownership stays intact
+        // copyWith preserves the original ownerId and listId so ownership stays intact
         final updatedTask = widget.existingTask!.copyWith(
           title: _titleController.text.trim(),
           dueDateTime: _dueDateTime,
@@ -162,8 +163,9 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
         );
         await _firestoreService.updateTask(updatedTask);
       } else {
-        // [ u b a c   t a s k   c r e a t i o n ]
-        // act3: require an active logged-in session and attach its UID as ownerId
+        // [ act3:  t a s k   c r e a t i o n ]
+        // require an active logged-in session and attach its UID as ownerId.
+        // Also attach activeListId.value (null for Personal, or listId for Collaborative).
         final uid = AuthService().currentUser?.uid;
         if (uid == null || uid.isEmpty) {
           throw StateError('No active user session. Please log in again.');
@@ -172,6 +174,7 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
         final task = Task(
           id: '',
           ownerId: uid,
+          listId: activeListId.value,
           title: _titleController.text.trim(),
           dueDateTime: _dueDateTime,
           priority: _priority,
