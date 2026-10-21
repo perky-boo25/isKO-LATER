@@ -42,7 +42,7 @@ Future<void> showCreateCollabListSheet(BuildContext context) async {
               ),
             ),
             Text(
-              'New Collaborative List',
+              'Create Collab Space',
               style: GoogleFonts.dmSerifDisplay(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -51,7 +51,7 @@ Future<void> showCreateCollabListSheet(BuildContext context) async {
             ),
             const SizedBox(height: 6),
             Text(
-              'Create a shared space and invite classmates or teammates.',
+              'Create a shared space and invite friends or classmates.',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
             ),
             const SizedBox(height: 16),
@@ -94,7 +94,7 @@ Future<void> showCreateCollabListSheet(BuildContext context) async {
                     onPressed: () =>
                         Navigator.pop(sheetContext, controller.text.trim()),
                     child: const Text(
-                      'Create List',
+                      'Create Space',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -117,15 +117,13 @@ Future<void> showCreateCollabListSheet(BuildContext context) async {
     // automatically switch to the newly created collaborative list
     activeListId.value = newList.id;
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Created "${newList.name}"')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Created "${newList.name}"')));
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not create list: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not create list: $e')));
     }
   }
 }
@@ -378,9 +376,7 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
     return AnimatedPadding(
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewInsetsOf(context).bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.82,
@@ -722,8 +718,7 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
                                       size: 18,
                                       color: Colors.red.shade700,
                                     ),
-                                    onPressed: () =>
-                                        _confirmAndRemoveMember(m),
+                                    onPressed: () => _confirmAndRemoveMember(m),
                                   ),
                                 ],
                               ],

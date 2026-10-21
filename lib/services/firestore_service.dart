@@ -54,14 +54,13 @@ class FirestoreService {
       return Stream.value(const []);
     }
 
-    // act 3
     // if a collaborative list is selected, query tasks belonging to that listId;
     // otherwise query personal tasks where ownerId == uid
     final query = (listId != null && listId.isNotEmpty)
         ? _taskRef.where('listId', isEqualTo: listId)
         : _taskRef.where('ownerId', isEqualTo: uid);
 
-    // [  q u e r y   f i l t e r ]
+    // [ u b a c   q u e r y   f i l t e r ]
     return query.snapshots().map((snapshot) {
       final tasks = snapshot.docs
           .map(
@@ -78,6 +77,56 @@ class FirestoreService {
       tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return tasks;
     });
+  }
+
+  // [ c a l e n d a r   m e r g e d   s t r e a m ]
+  // Streams all personal tasks + all tasks from the user's collaborative lists,
+  // merged and deduplicated by task ID.
+  Stream<List<Task>> streamAllUserAndCollabTasks(List<String> collabListIds) {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      return Stream.value(const []);
+    }
+
+    // If the user has no collaborative lists, only stream their owned tasks
+    if (collabListIds.isEmpty) {
+      return _taskRef.where('ownerId', isEqualTo: uid).snapshots().map((snap) {
+        final tasks = snap.docs
+            .map((d) => Task.fromMap(d.id, d.data() as Map<String, dynamic>))
+            .where((t) => t.deletedAt == null)
+            .toList();
+        tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return tasks;
+      });
+    }
+
+    // Merge owned tasks + collaborative list tasks reactively
+    final validIds = collabListIds.take(30).toList();
+    return _taskRef
+        .where(
+          Filter.or(
+            Filter('ownerId', isEqualTo: uid),
+            Filter('listId', whereIn: validIds),
+          ),
+        )
+        .snapshots()
+        .map((snap) {
+          final Map<String, Task> byId = {};
+          for (final doc in snap.docs) {
+            final task = Task.fromMap(
+              doc.id,
+              doc.data() as Map<String, dynamic>,
+            );
+            if (task.deletedAt != null) continue;
+            // keep personal tasks or tasks belonging to one of the user's collab lists
+            if (task.listId == null || validIds.contains(task.listId)) {
+              byId[task.id] = task;
+            }
+          }
+          final merged = byId.values.toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return merged;
+        });
   }
 
   // UPDATE - toggling completion state

@@ -4,15 +4,24 @@ import '../models/todo_list.dart';
 import '../screens/collab_list_sheets.dart';
 import '../services/todo_list_service.dart';
 
+// Personal list sentinel value for PopupMenuButton
+const String _kPersonalListValue = '__personal__';
+
 // [ l i s t   s w i t c h e r   b a r ]
 // Streams all collaborative lists where currentUid is in memberIds, and renders:
-// 1. Dropdown to switch between Personal To-Do List (null) and Collaborative Lists
+// 1. Dropdown (opening strictly downward) to switch between Personal and Shared lists
 // 2. Members / Invite button (when a Collaborative List is active)
 // 3. New Collaborative List button
 class ListSwitcherBar extends StatelessWidget {
   final String currentUid;
 
   const ListSwitcherBar({super.key, required this.currentUid});
+
+  String _activeLabel(TodoList? activeCollabList) {
+    if (activeCollabList == null) return 'Personal To-Do List';
+    final role = activeCollabList.isOwnedBy(currentUid) ? 'Owner' : 'Shared';
+    return '${activeCollabList.name} ($role)';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,85 +50,90 @@ class ListSwitcherBar extends StatelessWidget {
 
             return Row(
               children: [
-                // 1. Dropdown to switch between Personal List and Collaborative Lists
+                // 1. Normal dropdown that always opens strictly downward below the bar
                 Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF8EF),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFF4A3427),
-                        width: 1,
-                      ),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String?>(
-                        isExpanded: true,
-                        value: effectiveId,
-                        icon: const Icon(
-                          Icons.keyboard_arrow_down,
-                          color: Color(0xFF4A3427),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return PopupMenuButton<String>(
+                        position: PopupMenuPosition.under,
+                        offset: const Offset(0, 4),
+                        color: const Color(0xFFFFF8EF),
+                        constraints: BoxConstraints.tightFor(
+                          width: constraints.maxWidth,
                         ),
-                        dropdownColor: const Color(0xFFFFF8EF),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.lock_outline,
-                                  size: 16,
-                                  color: Color(0xFF4A3427),
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Personal To-Do List',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF4A3427),
-                                  ),
-                                ),
-                              ],
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: const BorderSide(
+                            color: Color(0xFF4A3427),
+                            width: 1,
+                          ),
+                        ),
+                        onSelected: (val) {
+                          activeListId.value = val == _kPersonalListValue
+                              ? null
+                              : val;
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem<String>(
+                            value: _kPersonalListValue,
+                            child: Text(
+                              'Personal To-Do List',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF4A3427),
+                              ),
                             ),
                           ),
                           ...collabLists.map((list) {
                             final isOwner = list.isOwnedBy(currentUid);
-                            return DropdownMenuItem<String?>(
+                            return PopupMenuItem<String>(
                               value: list.id,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    isOwner
-                                        ? Icons.groups
-                                        : Icons.folder_shared_outlined,
-                                    size: 16,
-                                    color: const Color(0xFFC65A42),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      '${list.name} (${isOwner ? 'Owner' : 'Shared'})',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF4A3427),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              child: Text(
+                                '${list.name} (${isOwner ? 'Owner' : 'Shared'})',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF4A3427),
+                                ),
                               ),
                             );
                           }),
                         ],
-                        onChanged: (newListId) {
-                          activeListId.value = newListId;
-                        },
-                      ),
-                    ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 11,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF8EF),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFF4A3427),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _activeLabel(activeCollabList),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF4A3427),
+                                  ),
+                                ),
+                              ),
+                              const Icon(
+                                Icons.keyboard_arrow_down,
+                                color: Color(0xFF4A3427),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
 
@@ -136,7 +150,7 @@ class ListSwitcherBar extends StatelessWidget {
                     ),
                     icon: Icon(
                       activeCollabList.isOwnedBy(currentUid)
-                          ? Icons.more_vert
+                          ? Icons.group_add_outlined
                           : Icons.group_outlined,
                       size: 20,
                     ),
@@ -157,7 +171,7 @@ class ListSwitcherBar extends StatelessWidget {
                     foregroundColor: const Color(0xFF4A3427),
                     side: const BorderSide(color: Color(0xFF4A3427)),
                   ),
-                  icon: const Icon(Icons.add_box_outlined, size: 20),
+                  icon: const Icon(Icons.domain_add, size: 20),
                   onPressed: () => showCreateCollabListSheet(context),
                 ),
               ],
