@@ -117,19 +117,22 @@ Future<void> showCreateCollabListSheet(BuildContext context) async {
     // automatically switch to the newly created collaborative list
     activeListId.value = newList.id;
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Created "${newList.name}"')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Created "${newList.name}"')));
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not create list: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not create list: $e')));
     }
   }
 }
 
 // [ 2 .   m e m b e r s   &   i n v i t e   s h e e t ]
-// Opens a bottom sheet showing list members and (for the owner) live user suggestions.
+// Opens a bottom sheet showing list members and (for the owner) live user suggestions,
+// member removal, and list deletion.
 Future<void> showCollabMembersSheet(
   BuildContext context, {
   required TodoList list,
@@ -169,6 +172,7 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
   List<AppUser> _allUsers = [];
   bool _loading = true;
   bool _isAdding = false;
+  bool _isDeletingList = false;
   String _searchQuery = '';
   String? _feedbackMessage;
   bool _isError = false;
@@ -217,6 +221,7 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
     }
   }
 
+  // [ o w n e r   a c t i o n :   a d d   m e m b e r ]
   Future<void> _inviteIdentifier(String identifier) async {
     if (identifier.trim().isEmpty || _isAdding) return;
 
@@ -256,6 +261,103 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
     }
   }
 
+  // [ o w n e r   a c t i o n :   r e m o v e   m e m b e r ]
+  Future<void> _confirmAndRemoveMember(AppUser member) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove member?'),
+        content: Text(
+          'Remove ${member.userName} (${member.email}) from "${widget.list.name}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await _service.removeMemberFromList(
+        listId: widget.list.id,
+        memberUid: member.uid,
+      );
+      widget.list.memberIds.remove(member.uid);
+      if (mounted) {
+        setState(() {
+          _members.removeWhere((m) => m.uid == member.uid);
+          _isError = false;
+          _feedbackMessage = 'Removed ${member.userName} from the list.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isError = true;
+          _feedbackMessage = e.toString().replaceFirst('Bad state: ', '');
+        });
+      }
+    }
+  }
+
+  // [ o w n e r   a c t i o n :   d e l e t e   c o l l a b   l i s t ]
+  Future<void> _confirmAndDeleteList() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete collaborative list?'),
+        content: Text(
+          'Are you sure you want to delete "${widget.list.name}"? All tasks in this shared list will also be permanently deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete List'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeletingList = true);
+    final listName = widget.list.name;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    try {
+      await _service.deleteCollaborativeList(widget.list.id);
+      if (mounted) {
+        navigator.pop();
+        messenger.showSnackBar(
+          SnackBar(content: Text('Deleted collaborative list "$listName"')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isDeletingList = false;
+          _isError = true;
+          _feedbackMessage = e.toString().replaceFirst('Bad state: ', '');
+        });
+      }
+    }
+  }
+
   String _initialFor(AppUser u) {
     final name = u.userName.trim();
     if (name.isNotEmpty) return name[0].toUpperCase();
@@ -276,7 +378,9 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
     return AnimatedPadding(
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewInsetsOf(context).bottom,
+      ),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.82,
@@ -300,7 +404,7 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
                 ),
               ),
 
-              // Title + Role badge
+              // Title + Role badge + Owner Delete List icon
               Row(
                 children: [
                   Expanded(
@@ -335,6 +439,23 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
                       ),
                     ),
                   ),
+                  if (_isOwner) ...[
+                    const SizedBox(width: 6),
+                    IconButton(
+                      tooltip: 'Delete Collaborative List',
+                      onPressed: _isDeletingList ? null : _confirmAndDeleteList,
+                      icon: _isDeletingList
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              Icons.delete_outline,
+                              color: Colors.red.shade700,
+                            ),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 16),
@@ -581,12 +702,31 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
                                 ),
                               ),
                             )
-                          : const Text(
-                              'Member',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFF4A3427),
-                              ),
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Member',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF4A3427),
+                                  ),
+                                ),
+                                if (_isOwner) ...[
+                                  const SizedBox(width: 4),
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    tooltip: 'Remove ${m.userName}',
+                                    icon: Icon(
+                                      Icons.person_remove_outlined,
+                                      size: 18,
+                                      color: Colors.red.shade700,
+                                    ),
+                                    onPressed: () =>
+                                        _confirmAndRemoveMember(m),
+                                  ),
+                                ],
+                              ],
                             ),
                     ),
                   );

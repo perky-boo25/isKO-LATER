@@ -136,7 +136,7 @@ class ListSwitcherBar extends StatelessWidget {
                     ),
                     icon: Icon(
                       activeCollabList.isOwnedBy(currentUid)
-                          ? Icons.group_add_outlined
+                          ? Icons.more_vert
                           : Icons.group_outlined,
                       size: 20,
                     ),

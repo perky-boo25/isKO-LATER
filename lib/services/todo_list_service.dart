@@ -17,6 +17,9 @@ class TodoListService {
   final CollectionReference _listRef = FirebaseFirestore.instance.collection(
     'todo_lists',
   );
+  final CollectionReference _taskRef = FirebaseFirestore.instance.collection(
+    'tasks',
+  );
   final CollectionReference _userRef = FirebaseFirestore.instance.collection(
     'users',
   );
@@ -181,6 +184,67 @@ class TodoListService {
     });
 
     return matchedUser;
+  }
+
+  // UPDATE - allows ONLY the list owner to remove a collaborator from memberIds
+  Future<void> removeMemberFromList({
+    required String listId,
+    required String memberUid,
+  }) async {
+    final uid = _requireUid;
+    final listDoc = await _listRef.doc(listId).get();
+    if (!listDoc.exists) {
+      throw StateError('Collaborative list not found.');
+    }
+    final list = TodoList.fromMap(
+      listDoc.id,
+      listDoc.data() as Map<String, dynamic>,
+    );
+    if (!list.isOwnedBy(uid)) {
+      throw StateError(
+        '403 Forbidden: Only the list owner can remove members.',
+      );
+    }
+    if (memberUid == list.ownerId) {
+      throw StateError('The list owner cannot be removed from their own list.');
+    }
+
+    await _listRef.doc(listId).update({
+      'memberIds': FieldValue.arrayRemove([memberUid]),
+    });
+  }
+
+  // DELETE - allows ONLY the list owner to delete a collaborative list and its tasks
+  Future<void> deleteCollaborativeList(String listId) async {
+    final uid = _requireUid;
+    final listDoc = await _listRef.doc(listId).get();
+    if (!listDoc.exists) {
+      throw StateError('Collaborative list not found.');
+    }
+    final list = TodoList.fromMap(
+      listDoc.id,
+      listDoc.data() as Map<String, dynamic>,
+    );
+    if (!list.isOwnedBy(uid)) {
+      throw StateError(
+        '403 Forbidden: Only the list owner can delete this list.',
+      );
+    }
+
+    // 1. Delete all tasks linked to this collaborative list first
+    // (must happen while todo_lists/{listId} still exists so security rules pass)
+    final tasksSnap = await _taskRef.where('listId', isEqualTo: listId).get();
+    for (final taskDoc in tasksSnap.docs) {
+      await taskDoc.reference.delete();
+    }
+
+    // 2. Delete the collaborative list document itself
+    await _listRef.doc(listId).delete();
+
+    // 3. Reset activeListId to Personal list if viewing the deleted list
+    if (activeListId.value == listId) {
+      activeListId.value = null;
+    }
   }
 
   // READ - fetches all registered AppUsers from `users` for live autocomplete suggestions
