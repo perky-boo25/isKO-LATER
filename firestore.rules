@@ -1,0 +1,125 @@
+ules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // [ h e l p e r s ]
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isListMember(listId) {
+      return isAuthenticated() &&
+             listId is string &&
+             listId.size() > 0 &&
+             request.auth.uid in get(/databases/$(database)/documents/todo_lists/$(listId)).data.memberIds;
+    }
+
+    // [ v a l i d a t o r s ]
+    function isValidUser(data) {
+      return data.keys().hasOnly(['email', 'userName', 'createdAt']) &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 254 &&
+             data.userName is string && data.userName.size() <= 100 &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidTodoList(data) {
+      return data.keys().hasAll(['name', 'ownerId', 'memberIds', 'createdAt']) &&
+             data.keys().hasOnly(['name', 'ownerId', 'memberIds', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.ownerId is string && data.ownerId.size() > 0 && data.ownerId.size() <= 128 &&
+             data.memberIds is list && data.memberIds.size() >= 1 && data.memberIds.size() <= 100 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll(['ownerId', 'title', 'dueDateTime', 'priority', 'tag', 'isDone', 'createdAt']) &&
+             data.keys().hasOnly([
+               'ownerId', 'listId', 'title', 'dueDateTime', 'priority',
+               'tag', 'isDone', 'createdAt', 'deletedAt', 'completedAt'
+             ]) &&
+             data.ownerId is string && data.ownerId.size() > 0 && data.ownerId.size() <= 128 &&
+             (data.get('listId', null) == null || (data.listId is string && data.listId.size() > 0 && data.listId.size() <= 128)) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 500 &&
+             data.dueDateTime is timestamp &&
+             data.priority in ['low', 'medium', 'high'] &&
+             data.tag in ['school', 'personal', 'others'] &&
+             data.isDone is bool &&
+             data.createdAt is timestamp &&
+             (data.get('deletedAt', null) == null || data.deletedAt is timestamp) &&
+             (data.get('completedAt', null) == null || data.completedAt is timestamp);
+    }
+
+    // [ u s e r s ]
+    match /users/{userId} {
+      // allow logged-in users to look up member names/emails; only owner can write
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) &&
+                       isValidUser(request.resource.data) &&
+                       (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt);
+      allow delete: if isOwner(userId);
+    }
+
+    // [ t o d o _ l i s t s ]
+    match /todo_lists/{listId} {
+      // RLS: only members can read; only list owner can update/delete
+      allow read: if isAuthenticated() &&
+                     request.auth.uid in resource.data.memberIds;
+
+      allow create: if isAuthenticated() &&
+                       isValidTodoList(request.resource.data) &&
+                       request.resource.data.ownerId == request.auth.uid &&
+                       request.auth.uid in request.resource.data.memberIds;
+
+      allow update: if isAuthenticated() &&
+                       resource.data.ownerId == request.auth.uid &&
+                       isValidTodoList(request.resource.data) &&
+                       request.resource.data.ownerId == resource.data.ownerId &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       request.auth.uid in request.resource.data.memberIds;
+
+      allow delete: if isAuthenticated() &&
+                       resource.data.ownerId == request.auth.uid;
+    }
+
+    // [ t a s k s ]
+    match /tasks/{taskId} {
+      // UBAC & RLS: personal tasks require ownerId match; shared tasks require list membership
+      allow read: if isAuthenticated() && (
+                    resource.data.ownerId == request.auth.uid ||
+                    (resource.data.get('listId', null) is string && isListMember(resource.data.listId))
+                  );
+
+      allow create: if isAuthenticated() &&
+                       isValidTask(request.resource.data) &&
+                       request.resource.data.ownerId == request.auth.uid && (
+                         request.resource.data.get('listId', null) == null ||
+                         isListMember(request.resource.data.listId)
+                       );
+
+      allow update: if isAuthenticated() &&
+                       isValidTask(request.resource.data) &&
+                       request.resource.data.ownerId == resource.data.ownerId &&
+                       request.resource.data.get('listId', null) == resource.data.get('listId', null) &&
+                       request.resource.data.createdAt == resource.data.createdAt && (
+                         (resource.data.get('listId', null) == null && resource.data.ownerId == request.auth.uid) ||
+                         (resource.data.get('listId', null) is string && isListMember(resource.data.listId))
+                       );
+
+      allow delete: if isAuthenticated() && (
+                       (resource.data.get('listId', null) == null && resource.data.ownerId == request.auth.uid) ||
+                       (resource.data.get('listId', null) is string && isListMember(resource.data.listId))
+                     );
+    }
+
+    // [ d e f a u l t   d e n y ]
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

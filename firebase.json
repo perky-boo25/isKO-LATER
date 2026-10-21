@@ -1,1 +1,24 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"isko-later-app","appId":"1:734316093592:android:d3ef1f92f5fa32a652b0ed","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"isko-later-app","configurations":{"android":"1:734316093592:android:d3ef1f92f5fa32a652b0ed"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "isko-later-app",
+          "appId": "1:734316093592:android:d3ef1f92f5fa32a652b0ed",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "isko-later-app",
+          "configurations": {
+            "android": "1:734316093592:android:d3ef1f92f5fa32a652b0ed"
+          }
+        }
+      }
+    }
+  }
+}
