@@ -11,7 +11,7 @@ import '../models/user.dart';
 final ValueNotifier<String?> activeListId = ValueNotifier<String?>(null);
 
 // [ c o l l a b o r a t i v e   l i s t   s e r v i c e ]
-// Handles all reads/writes to todo_lists and member lookups in users.
+// Handles all reads/writes to `todo_lists` and member lookups in `users`.
 // Separated from FirestoreService so personal task CRUD stays clean and modular.
 class TodoListService {
   final CollectionReference _listRef = FirebaseFirestore.instance.collection(
@@ -33,8 +33,22 @@ class TodoListService {
     return uid;
   }
 
-  // [  m e m b e r s h i p   c h e c k ]
-  // Verifies that the logged-in user is in todo_lists/{listId}.memberIds
+  // Safely parses a `users/{uid}` document even if `createdAt` was omitted
+  // during a profile sync (`syncProfileToFirestore`).
+  AppUser _safeUserFromMap(String uid, Map<String, dynamic> map) {
+    final rawCreatedAt = map['createdAt'];
+    return AppUser(
+      uid: uid,
+      email: (map['email'] as String?) ?? '',
+      userName: (map['userName'] as String?) ?? 'User',
+      createdAt: rawCreatedAt is Timestamp
+          ? rawCreatedAt.toDate()
+          : DateTime.now(),
+    );
+  }
+
+  // [ u b a c   m e m b e r s h i p   c h e c k ]
+  // Verifies that the logged-in user is in `todo_lists/{listId}.memberIds`
   Future<void> verifyMembership(String listId) async {
     final uid = _requireUid;
     final listDoc = await _listRef.doc(listId).get();
@@ -60,19 +74,22 @@ class TodoListService {
       return Stream.value(const []);
     }
 
-    return _listRef.where('memberIds', arrayContains: uid).snapshots().map((
-      snapshot,
-    ) {
-      final lists = snapshot.docs
-          .map(
-            (doc) =>
-                TodoList.fromMap(doc.id, doc.data() as Map<String, dynamic>),
-          )
-          .toList();
+    return _listRef
+        .where('memberIds', arrayContains: uid)
+        .snapshots()
+        .map((snapshot) {
+          final lists = snapshot.docs
+              .map(
+                (doc) => TodoList.fromMap(
+                  doc.id,
+                  doc.data() as Map<String, dynamic>,
+                ),
+              )
+              .toList();
 
-      lists.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      return lists;
-    });
+          lists.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          return lists;
+        });
   }
 
   // CREATE - creates a new collaborative list owned by currentUser
@@ -125,21 +142,33 @@ class TodoListService {
       throw StateError('403 Forbidden: Only the list owner can add members.');
     }
 
-    // 2. Look up target user in `users` collection by email or userName (case-insensitive)
+    // 2. Look up target user in `users` collection by email or userName
+    // (prefers exact case-insensitive match first, then partial contains match)
     final usersSnapshot = await _userRef.get();
-    AppUser? matchedUser;
+    AppUser? exactMatch;
+    AppUser? partialMatch;
+
     for (final doc in usersSnapshot.docs) {
-      final data = doc.data() as Map<String, dynamic>;
+      final data = doc.data() as Map<String, dynamic>?;
+      if (data == null) continue;
       final email = (data['email'] as String? ?? '').trim().toLowerCase();
       final userName = (data['userName'] as String? ?? '').trim().toLowerCase();
+      final candidate = _safeUserFromMap(doc.id, data);
+
       if (email == queryText || userName == queryText) {
-        matchedUser = AppUser.fromMap(doc.id, data);
+        exactMatch = candidate;
         break;
+      }
+      if (partialMatch == null &&
+          !list.hasMember(candidate.uid) &&
+          (email.contains(queryText) || userName.contains(queryText))) {
+        partialMatch = candidate;
       }
     }
 
+    final matchedUser = exactMatch ?? partialMatch;
     if (matchedUser == null) {
-      throw StateError('No registered user found with "$identifier".');
+      throw StateError('No registered user found matching "$identifier".');
     }
 
     if (list.hasMember(matchedUser.uid)) {
@@ -154,6 +183,23 @@ class TodoListService {
     return matchedUser;
   }
 
+  // READ - fetches all registered AppUsers from `users` for live autocomplete suggestions
+  Future<List<AppUser>> getAllUsers() async {
+    _requireUid;
+    final snap = await _userRef.get();
+    final List<AppUser> users = [];
+    for (final doc in snap.docs) {
+      final data = doc.data() as Map<String, dynamic>?;
+      if (data != null) {
+        users.add(_safeUserFromMap(doc.id, data));
+      }
+    }
+    users.sort(
+      (a, b) => a.userName.toLowerCase().compareTo(b.userName.toLowerCase()),
+    );
+    return users;
+  }
+
   // READ - resolves member UIDs into AppUser objects from `users/{uid}`
   // so user names/emails are never duplicated inside task or list documents
   Future<List<AppUser>> getListMembers(List<String> memberIds) async {
@@ -162,7 +208,7 @@ class TodoListService {
       final doc = await _userRef.doc(memberUid).get();
       if (doc.exists && doc.data() != null) {
         members.add(
-          AppUser.fromMap(doc.id, doc.data() as Map<String, dynamic>),
+          _safeUserFromMap(doc.id, doc.data() as Map<String, dynamic>),
         );
       }
     }
