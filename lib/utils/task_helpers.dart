@@ -14,24 +14,57 @@ abstract final class TaskHelpers {
       DateTime(date.year, date.month, date.day);
 
   /// Returns `true` if [date] falls on today's local calendar date.
-  static bool isToday(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day;
+  static bool isToday(DateTime date, {DateTime? now}) {
+    final ref = now ?? DateTime.now();
+    return date.year == ref.year &&
+        date.month == ref.month &&
+        date.day == ref.day;
   }
 
-  /// Places incomplete tasks at the top and pushes completed tasks to the bottom,
-  /// ordering completed tasks chronologically by `completedAt`.
+  /// Returns `true` if [task] is still incomplete and its `dueDateTime` has passed.
+  static bool isOverdue(Task task, {DateTime? now}) {
+    if (task.isDone) return false;
+    final ref = now ?? DateTime.now();
+    return task.dueDateTime.isBefore(ref);
+  }
+
+  /// Returns `true` if [date] falls on a calendar day strictly after today.
+  static bool isFutureDay(DateTime date, {DateTime? now}) {
+    final ref = now ?? DateTime.now();
+    return dayOnly(date).isAfter(dayOnly(ref));
+  }
+
+  /// Single-pass comparator that orders tasks for optimal UX:
+  /// 1. Incomplete tasks (`!isDone`) always appear above completed tasks (`isDone`).
+  /// 2. Incomplete tasks are ordered by soonest `dueDateTime`, breaking ties by
+  ///    highest `Priority` (`high` -> `medium` -> `low`).
+  /// 3. Completed tasks are ordered by most recently completed (`completedAt` desc),
+  ///    treating a pending `serverTimestamp()` (`null`) as `now` to prevent UI flicker.
   static List<Task> sortWithDoneAtBottom(List<Task> input) {
-    final notDone = input.where((t) => !t.isDone).toList();
-    final done = input.where((t) => t.isDone).toList()
-      ..sort((a, b) {
-        final aTime = a.completedAt ?? DateTime(0);
-        final bTime = b.completedAt ?? DateTime(0);
-        return aTime.compareTo(bTime);
-      });
-    return [...notDone, ...done];
+    final now = DateTime.now();
+    final sorted = List<Task>.of(input);
+
+    sorted.sort((a, b) {
+      // 1. Group incomplete tasks above completed tasks
+      if (a.isDone != b.isDone) {
+        return a.isDone ? 1 : -1;
+      }
+
+      // 2. Both incomplete: earliest deadline first, then highest priority first
+      if (!a.isDone) {
+        final dueComparison = a.dueDateTime.compareTo(b.dueDateTime);
+        if (dueComparison != 0) return dueComparison;
+        // Priority enum is { low (0), medium (1), high (2) } -> descending index
+        return b.priority.index.compareTo(a.priority.index);
+      }
+
+      // 3. Both completed: most recently finished first (avoids year-0 flicker)
+      final aCompleted = a.completedAt ?? now;
+      final bCompleted = b.completedAt ?? now;
+      return bCompleted.compareTo(aCompleted);
+    });
+
+    return sorted;
   }
 
   /// Converts raw Dart/Firebase exceptions into safe, user-friendly feedback
