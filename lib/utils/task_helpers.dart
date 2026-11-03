@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/task.dart';
 import '../services/firestore_service.dart';
+import '../widgets/confirm_dialog.dart';
 
 // [ act4: s h a r e d   t a s k   &   e r r o r   h e l p e r s ]
 // Consolidates duplicated sorting, date-stripping, friendly error translation,
@@ -123,26 +124,16 @@ abstract final class TaskHelpers {
     required Task task,
     required FirestoreService service,
   }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete this task?'),
-        content: Text('Move "${task.title}" to deleted items?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: 'Delete this task?',
+      message:
+          '"${task.title}" will be removed from your list. You can still tap Undo right after.',
+      confirmLabel: 'Delete',
+      icon: Icons.delete_outline_rounded,
     );
 
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
 
     // Capture ScaffoldMessenger before awaiting Firestore so Undo still shows
     // even if removing the task disposes the item widget on the current day.

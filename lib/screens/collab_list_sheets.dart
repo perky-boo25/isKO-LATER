@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/todo_list.dart';
 import '../models/user.dart';
 import '../services/todo_list_service.dart';
+import '../widgets/confirm_dialog.dart';
 
 // [ 1 .   c r e a t e   c o l l a b o r a t i v e   l i s t   s h e e t ]
 // Opens a bottom sheet for creating a new shared list owned by currentUser.
@@ -261,28 +262,16 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
 
   // [ o w n e r   a c t i o n :   r e m o v e   m e m b e r ]
   Future<void> _confirmAndRemoveMember(AppUser member) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Remove member?'),
-        content: Text(
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: 'Remove member?',
+      message:
           'Remove ${member.userName} (${member.email}) from "${widget.list.name}"?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Remove',
+      icon: Icons.person_remove_outlined,
     );
 
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     try {
       await _service.removeMemberFromList(
@@ -309,28 +298,16 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
 
   // [ o w n e r   a c t i o n :   d e l e t e   c o l l a b   l i s t ]
   Future<void> _confirmAndDeleteList() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete collaborative list?'),
-        content: Text(
-          'Are you sure you want to delete "${widget.list.name}"? All tasks in this shared list will also be permanently deleted.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete List'),
-          ),
-        ],
-      ),
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: 'Delete shared list?',
+      message:
+          'Are you sure you want to delete "${widget.list.name}"? All tasks inside this shared space will also be permanently deleted.',
+      confirmLabel: 'Delete List',
+      icon: Icons.delete_forever_outlined,
     );
 
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     setState(() => _isDeletingList = true);
     final listName = widget.list.name;

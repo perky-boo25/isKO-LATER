@@ -2,37 +2,29 @@ import 'package:flutter/material.dart';
 
 import '../screens/add_edit_task.dart';
 import '../screens/calendar_screen.dart';
+import '../screens/profile_screen.dart';
 import '../services/auth_service.dart';
 import '../services/todo_list_service.dart';
-import '../screens/profile_screen.dart';
+import '../utils/app_theme.dart';
+import 'confirm_dialog.dart';
 
 enum AppTab { tasks, calendar, profile }
 
 // [ l o g o u t   &   r e t u r n   t o   r o o t ]
 // prompts user confirmation, terminates session, and resets navigation stack
 Future<void> logoutAndReturnToRoot(BuildContext context) async {
-  // prompt logout confirmation dialog
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Log out?'),
-      actions: [
-        // dismiss dialog without signing out
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('Cancel'),
-        ),
-        // confirm logout intention
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext, true),
-          child: const Text('Log out'),
-        ),
-      ],
-    ),
+  // prompt styled logout confirmation dialog
+  final confirmed = await showAppConfirmDialog(
+    context,
+    title: 'Log out?',
+    message: 'Are you sure you want to sign out of your IsKO-LATER account?',
+    confirmLabel: 'Log out',
+    icon: Icons.logout_rounded,
+    accentColor: AppColors.logoutAmber,
   );
 
   // user cancelled or dismissed dialog
-  if (confirmed != true) return;
+  if (!confirmed) return;
 
   // guard async gap after dialog closure
   if (!context.mounted) return;

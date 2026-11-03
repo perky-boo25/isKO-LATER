@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/auth_service.dart';
+import '../utils/app_theme.dart';
 import '../widgets/app_shared.dart';
 import '../widgets/auth_widgets.dart' show AuthValidators;
 
@@ -195,40 +196,81 @@ class _ProfileScreenState extends State<ProfileScreen>
       barrierDismissible: false, // must acknowledge; no skipping the logout
       builder: (dialogContext) => PopScope(
         canPop: false,
-        child: AlertDialog(
-          icon: const Icon(
-            Icons.verified_outlined,
-            color: Color(0xFF6B7F4E),
-            size: 40,
+        child: Dialog(
+          backgroundColor: AppColors.creamSurface,
+          surfaceTintColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 28,
+            vertical: 24,
           ),
-          title: Text(
-            'Email verified',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: AppColors.espresso.withValues(alpha: 0.15)),
           ),
-          content: Text(
-            'Your email is now $newEmail.\n\n'
-            'For your security, please log in again with your new email.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(fontSize: 14),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF4A3427),
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(48),
-                shape: const StadiumBorder(),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: AppColors.oliveAccent.withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.verified_outlined,
+                      color: Color(0xFF6B7F4E),
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Email verified',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.dmSerifDisplay(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.espresso,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your email is now $newEmail.\n\n'
+                    'For your security, please log in again with your new email.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.4,
+                      color: AppColors.espresso.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.espresso,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: const StadiumBorder(),
+                    ),
+                    child: const Text(
+                      'Go to login',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
               ),
-              child: const Text('Go to login'),
             ),
-          ],
+          ),
         ),
       ),
     );
 
-    // set BEFORE signing out so a freshly built login screen can read it
+    // set BEFORE signing out so LoginScreen listener fills the field immediately
     loginEmailPrefill.value = newEmail;
     try {
       await AuthService().logout(); // harmless if firebase already did it
@@ -239,7 +281,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFBF8F4),
+      backgroundColor: AppColors.profileSurface,
       body: SafeArea(
         child: StreamBuilder<User?>(
           stream: AuthService().userChanges,
@@ -278,7 +320,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               child: const Icon(
                                 Icons.person_outline,
                                 size: 42,
-                                color: Color(0xFF4A3427),
+                                color: AppColors.espresso,
                               ),
                             ),
                             const SizedBox(width: 20),
@@ -305,8 +347,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.poppins(
                                       fontSize: 14,
-                                      color: const Color(0xFF4A3427)
-                                          .withValues(alpha: 0.65),
+                                      color: AppColors.espresso.withValues(
+                                        alpha: 0.65,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -361,8 +404,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                               'Email changes require verification.',
                               style: GoogleFonts.poppins(
                                 fontSize: 12.5,
-                                color: const Color(0xFF4A3427)
-                                    .withValues(alpha: 0.7),
+                                color: AppColors.espresso.withValues(
+                                  alpha: 0.7,
+                                ),
                               ),
                             ),
                           ),
@@ -391,8 +435,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   'Open the link we emailed, then come back here.',
                                   style: GoogleFonts.poppins(
                                     fontSize: 12.5,
-                                    color: const Color(0xFF4A3427)
-                                        .withValues(alpha: 0.8),
+                                    color: AppColors.espresso.withValues(
+                                      alpha: 0.8,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -410,9 +455,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                       FilledButton(
                         onPressed: (dirty && !_saving) ? _save : null,
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF4A3427),
+                          backgroundColor: AppColors.espresso,
                           foregroundColor: Colors.white,
-                          disabledBackgroundColor: const Color(0xFF4A3427)
+                          disabledBackgroundColor: AppColors.espresso
                               .withValues(alpha: 0.35),
                           disabledForegroundColor: Colors.white,
                           minimumSize: const Size.fromHeight(56),
@@ -454,13 +499,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                         ),
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color.fromARGB(
-                            255,
-                            228,
-                            140,
-                            16,
-                          ), // Matching your app's red error color
-                          foregroundColor: Colors.white, // White text and icon
+                          backgroundColor: AppColors.logoutAmber,
+                          foregroundColor: Colors.white,
                           minimumSize: const Size.fromHeight(56),
                           shape: const StadiumBorder(),
                         ),
@@ -486,7 +526,7 @@ class _HeaderBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 32, 20, 10),
-      color: const Color(0xFFFCE8CB),
+      color: AppColors.creamHeader,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -524,7 +564,7 @@ class _SoftCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFEFE6DD)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4A3427).withValues(alpha: 0.05),
+            color: AppColors.espresso.withValues(alpha: 0.05),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -570,7 +610,7 @@ class _EditableTile extends StatelessWidget {
                   label,
                   style: GoogleFonts.poppins(
                     fontSize: 13,
-                    color: const Color(0xFF4A3427).withValues(alpha: 0.65),
+                    color: AppColors.espresso.withValues(alpha: 0.65),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -580,7 +620,7 @@ class _EditableTile extends StatelessWidget {
                     autofocus: true,
                     keyboardType: keyboardType,
                     style: valueStyle,
-                    cursorColor: const Color(0xFF4A3427),
+                    cursorColor: AppColors.espresso,
                     decoration: const InputDecoration(
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 6),
@@ -598,10 +638,10 @@ class _EditableTile extends StatelessWidget {
             ),
           ),
           IconButton(
+            tooltip: editing ? 'Done editing $label' : 'Edit $label',
             onPressed: onToggle,
             icon: Icon(editing ? Icons.check : Icons.edit_outlined, size: 20),
             color: const Color(0xFF6B7F4E),
-            // Adds a subtle green background highlight when pressed/clicked
             splashColor: const Color(0xFF6B7F4E).withValues(alpha: 0.2),
             highlightColor: const Color(0xFF6B7F4E).withValues(alpha: 0.1),
           ),
@@ -637,55 +677,141 @@ class _ReauthDialogState extends State<_ReauthDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        'Confirm it\u2019s you',
-        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+    return Dialog(
+      backgroundColor: AppColors.creamSurface,
+      surfaceTintColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: AppColors.espresso.withValues(alpha: 0.15)),
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Enter your current password to change your email.',
-            style: GoogleFonts.poppins(fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _ctrl,
-            obscureText: _hidden,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _submit(),
-            decoration: InputDecoration(
-              hintText: 'Current password',
-              suffixIcon: IconButton(
-                tooltip: _hidden ? 'Show password' : 'Hide password',
-                icon: Icon(
-                  _hidden
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: AppColors.espresso.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
                 ),
-                onPressed: () => setState(() => _hidden = !_hidden),
+                child: const Icon(
+                  Icons.lock_outline_rounded,
+                  color: AppColors.espresso,
+                  size: 26,
+                ),
               ),
-            ),
+              const SizedBox(height: 16),
+              Text(
+                'Confirm it\u2019s you',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.dmSerifDisplay(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.espresso,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Enter your current password to change your email.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: AppColors.espresso.withValues(alpha: 0.78),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _ctrl,
+                obscureText: _hidden,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _submit(),
+                decoration: InputDecoration(
+                  hintText: 'Current password',
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.brown.shade200),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.brown.shade200),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: AppColors.espresso,
+                      width: 1.5,
+                    ),
+                  ),
+                  suffixIcon: IconButton(
+                    tooltip: _hidden ? 'Show password' : 'Hide password',
+                    icon: Icon(
+                      _hidden
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      color: AppColors.espresso,
+                    ),
+                    onPressed: () => setState(() => _hidden = !_hidden),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.espresso,
+                          side: BorderSide(
+                            color: AppColors.espresso.withValues(alpha: 0.35),
+                          ),
+                          shape: const StadiumBorder(),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: FilledButton(
+                        onPressed: _submit,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.espresso,
+                          foregroundColor: Colors.white,
+                          shape: const StadiumBorder(),
+                        ),
+                        child: const Text(
+                          'Continue',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context), // null = cancelled
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _submit,
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF4A3427),
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('Continue'),
-        ),
-      ],
     );
   }
 }
