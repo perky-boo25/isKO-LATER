@@ -7,7 +7,7 @@ import '../utils/task_helpers.dart';
 
 // [ t a s k   c a r d ]
 // Reusable card item displaying task title, category tag, due date/time,
-// overdue status indicator, completion checkbox, priority dot, and delete action.
+// completion checkbox, priority/overdue indicator, and delete action.
 class TaskCard extends StatelessWidget {
   final Task task;
   final VoidCallback? onTap;
@@ -29,6 +29,9 @@ class TaskCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final priorityLabel = '${AppColors.priorityLabel(task.priority)} priority';
     final overdue = TaskHelpers.isOverdue(task);
+    final statusTooltip = overdue
+        ? 'Overdue ($priorityLabel)'
+        : priorityLabel;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -43,38 +46,45 @@ class TaskCard extends StatelessWidget {
             onChanged: (_) => onToggleDone?.call(),
           ),
         ),
+        // [ act4: highlight title in red when overdue; strikethrough when done ]
         title: Text(
           task.title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: task.isDone
               ? const TextStyle(decoration: TextDecoration.lineThrough)
-              : null,
+              : overdue
+                  ? const TextStyle(
+                      color: AppColors.errorRed,
+                      fontWeight: FontWeight.w600,
+                    )
+                  : null,
         ),
+        // Keep subtitle concise so tag + full due date/time never get cut off
         subtitle: Text(
-          overdue
-              ? 'OVERDUE ★ ${task.tag.name} ★ ${_formattedDueDateTime(task.dueDateTime)}'
-              : '${task.tag.name} ★ ${_formattedDueDateTime(task.dueDateTime)}',
+          '${task.tag.name} ★ ${_formattedDueDateTime(task.dueDateTime)}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 12,
-            color: overdue ? AppColors.errorRed : null,
-            fontWeight: overdue ? FontWeight.w600 : FontWeight.normal,
-          ),
+          style: const TextStyle(fontSize: 12),
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // [ act4: accessible priority dot with tooltip & centralized color ]
+            // [ act4: swap priority dot for red exclamation icon when overdue ]
             Tooltip(
-              message: priorityLabel,
+              message: statusTooltip,
               child: Semantics(
-                label: priorityLabel,
-                child: CircleAvatar(
-                  radius: 6,
-                  backgroundColor: AppColors.priorityColor(task.priority),
-                ),
+                label: statusTooltip,
+                child: overdue
+                    ? const Icon(
+                        Icons.error_rounded,
+                        size: 18,
+                        color: AppColors.errorRed,
+                      )
+                    : CircleAvatar(
+                        radius: 6,
+                        backgroundColor: AppColors.priorityColor(task.priority),
+                      ),
               ),
             ),
             IconButton(
