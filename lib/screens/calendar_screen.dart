@@ -8,8 +8,10 @@ import '../models/todo_list.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/todo_list_service.dart';
-import '../widgets/task_card.dart';
+import '../utils/app_theme.dart';
+import '../utils/task_helpers.dart';
 import '../widgets/app_shared.dart';
+import '../widgets/task_card.dart';
 import 'add_edit_task.dart';
 
 // Filter constants for Calendar view
@@ -24,18 +26,14 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
+  // [ act4: reuse single service instances across rebuilds ]
+  final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
+  final TodoListService _todoListService = TodoListService();
+
   DateTime _selectedDay = DateTime.now();
   // Default to showing all merged tasks (Personal + Collaborative)
   String _selectedFilter = _kFilterAll;
-
-  // strips the time so tasks on the same day group together regardless of hour
-  DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
-
-  List<Task> _withDoneAtBottom(List<Task> input) {
-    final notDone = input.where((t) => !t.isDone).toList();
-    final done = input.where((t) => t.isDone).toList();
-    return [...notDone, ...done];
-  }
 
   // Filters the merged task list based on the user's selected filter dropdown
   List<Task> _applyListFilter(List<Task> allTasks, String filter) {
@@ -56,19 +54,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF8EF),
+      backgroundColor: AppColors.creamSurface,
       body: SafeArea(
         // [ u b a c   m e r g e d   c a l e n d a r   s t r e a m ]
         // Streams the user's accessible collaborative lists, then merges all
         // personal + collaborative tasks with a simple list filter selector.
         child: StreamBuilder<User?>(
-          stream: AuthService().authStateChanges,
-          initialData: AuthService().currentUser,
+          stream: _authService.authStateChanges,
+          initialData: _authService.currentUser,
           builder: (context, authSnap) {
             final uid = authSnap.data?.uid;
             return StreamBuilder<List<TodoList>>(
               key: ValueKey('lists_$uid'),
-              stream: TodoListService().streamCollaborativeLists(),
+              stream: _todoListService.streamCollaborativeLists(),
               builder: (context, listSnap) {
                 final collabLists = listSnap.data ?? [];
                 final collabIds = collabLists.map((l) => l.id).toList();
@@ -84,7 +82,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
                 return StreamBuilder<List<Task>>(
                   key: ValueKey('${uid}_${collabIds.join(",")}'),
-                  stream: FirestoreService().streamAllUserAndCollabTasks(
+                  stream: _firestoreService.streamAllUserAndCollabTasks(
                     collabIds,
                   ),
                   builder: (context, snapshot) {
@@ -93,7 +91,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     }
                     if (snapshot.hasError) {
                       return Center(
-                        child: Text('Error loading tasks: ${snapshot.error}'),
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            TaskHelpers.friendlyError(
+                              snapshot.error!,
+                              fallback: 'Could not load calendar tasks.',
+                            ),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppColors.errorRed),
+                          ),
+                        ),
                       );
                     }
 
@@ -106,12 +114,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     // grouped by day, used to filter the list under the calendar
                     final Map<DateTime, List<Task>> tasksByDay = {};
                     for (final t in filteredTasks) {
-                      final key = _dayOnly(t.dueDateTime);
+                      final key = TaskHelpers.dayOnly(t.dueDateTime);
                       tasksByDay.putIfAbsent(key, () => []).add(t);
                     }
 
-                    final selectedTasks = _withDoneAtBottom(
-                      tasksByDay[_dayOnly(_selectedDay)] ?? [],
+                    final selectedTasks = TaskHelpers.sortWithDoneAtBottom(
+                      tasksByDay[TaskHelpers.dayOnly(_selectedDay)] ?? [],
                     );
 
                     return Column(
@@ -141,7 +149,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-      color: const Color(0xFFFCE8CB),
+      color: AppColors.creamHeader,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -149,7 +157,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             'Calendar 𖤓',
             style: GoogleFonts.dmSerifDisplay(
               textStyle: Theme.of(context).textTheme.headlineSmall,
-              color: const Color.fromARGB(255, 73, 50, 41),
+              color: AppColors.espresso,
               fontSize: 30,
               fontWeight: FontWeight.bold,
             ),
@@ -167,13 +175,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           return PopupMenuButton<String>(
+            tooltip: 'Filter tasks by list',
             position: PopupMenuPosition.under,
             offset: const Offset(0, 4),
-            color: const Color(0xFFFFF8EF),
+            color: AppColors.creamSurface,
             constraints: BoxConstraints.tightFor(width: constraints.maxWidth),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Color(0xFF4A3427), width: 1),
+              side: const BorderSide(color: AppColors.espresso, width: 1),
             ),
             onSelected: (val) => setState(() => _selectedFilter = val),
             itemBuilder: (context) => [
@@ -183,7 +192,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   'All Tasks',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF4A3427),
+                    color: AppColors.espresso,
                   ),
                 ),
               ),
@@ -193,7 +202,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   'Personal To-Do List',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF4A3427),
+                    color: AppColors.espresso,
                   ),
                 ),
               ),
@@ -205,7 +214,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF4A3427),
+                      color: AppColors.espresso,
                     ),
                   ),
                 ),
@@ -214,9 +223,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF8EF),
+                color: AppColors.creamSurface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF4A3427), width: 1),
+                border: Border.all(color: AppColors.espresso, width: 1),
               ),
               child: Row(
                 children: [
@@ -227,13 +236,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF4A3427),
+                        color: AppColors.espresso,
                       ),
                     ),
                   ),
                   const Icon(
                     Icons.keyboard_arrow_down,
-                    color: Color(0xFF4A3427),
+                    color: AppColors.espresso,
                   ),
                 ],
               ),
@@ -264,7 +273,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           textAlign: TextAlign.center,
           backgroundColor: Color.fromARGB(255, 255, 227, 205),
           textStyle: TextStyle(
-            color: Color(0xFF4A3427),
+            color: AppColors.espresso,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
@@ -274,8 +283,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
         todayHighlightColor: const Color(0xFFE8873A),
         selectionDecoration: BoxDecoration(
-          color: const Color(0xFF4A3427).withValues(alpha: 0.08),
-          border: Border.all(color: const Color(0xFF4A3427), width: 1.5),
+          color: AppColors.espresso.withValues(alpha: 0.08),
+          border: Border.all(color: AppColors.espresso, width: 1.5),
           borderRadius: BorderRadius.circular(8),
         ),
         monthViewSettings: const MonthViewSettings(
@@ -300,7 +309,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     if (tasks.isEmpty) {
       return Center(
         child: Text(
-          'No tasks on this day★',
+          'No tasks on this day ★',
           style: TextStyle(color: Colors.grey.shade500),
         ),
       );
@@ -312,53 +321,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
       itemBuilder: (context, i) {
         final task = tasks[i];
         return TaskCard(
+          key: ValueKey(task.id),
           task: task,
           onTap: () => showAddEditTaskSheet(context, existingTask: task),
-          onToggleDone: () async {
-            try {
-              await FirestoreService().toggleTaskDone(task);
-            } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('could not update task: $e')),
-                );
-              }
-            }
-          },
-          onDelete: () async {
-            final confirmed = await showDialog<bool>(
-              context: context,
-              builder: (dialogContext) => AlertDialog(
-                title: const Text('Delete this task?'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogContext, false),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogContext, true),
-                    child: const Text('Delete'),
-                  ),
-                ],
-              ),
-            );
-            if (confirmed != true) return;
-            if (!context.mounted) return;
-
-            // capture before the await — task leaves this day's list the
-            // instant deletedAt is set, which can dispose this context
-            final messenger = ScaffoldMessenger.of(context);
-            await FirestoreService().softDelete(task);
-            messenger.showSnackBar(
-              SnackBar(
-                content: const Text('Task deleted'),
-                action: SnackBarAction(
-                  label: 'Undo',
-                  onPressed: () => FirestoreService().undoDelete(task),
-                ),
-              ),
-            );
-          },
+          onToggleDone: () => TaskHelpers.toggleTaskDone(
+            context,
+            task: task,
+            service: _firestoreService,
+          ),
+          onDelete: () => TaskHelpers.confirmAndSoftDelete(
+            context,
+            task: task,
+            service: _firestoreService,
+          ),
         );
       },
     );
@@ -375,22 +350,10 @@ class _TaskDataSource extends CalendarDataSource {
             startTime: t.dueDateTime,
             endTime: t.dueDateTime.add(const Duration(hours: 1)),
             subject: t.title,
-            color: _priorityColor(t.priority),
+            // [ act4: uses centralized AppColors.priorityColor ]
+            color: AppColors.priorityColor(t.priority),
           ),
         )
         .toList();
-  }
-
-  // same priority palette used on TaskCard, kept local here since this
-  // class only needs it to color each appointment's dot
-  Color _priorityColor(Priority p) {
-    switch (p) {
-      case Priority.high:
-        return Colors.pinkAccent;
-      case Priority.medium:
-        return const Color(0xFFE8873A);
-      case Priority.low:
-        return Colors.blueAccent;
-    }
   }
 }
