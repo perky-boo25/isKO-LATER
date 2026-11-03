@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/auth_service.dart';
+import '../utils/app_theme.dart';
 import '../widgets/auth_widgets.dart';
-import 'register_screen.dart';
 import 'forgot_password_screen.dart';
+import 'register_screen.dart';
 
 // [ l o g i n   s c r e e n ]
 // handles user sign in with email & password
@@ -16,17 +17,28 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  //form state + auth logic handler
+  // form state + auth logic handler
   final _formKey = GlobalKey<FormState>();
   final _authService = AuthService();
 
-  //text controllers
+  // text controllers
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
   // page ui states
   bool _isLoading = false;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    // [ act4: consume loginEmailPrefill set after a verified email change ]
+    final prefill = loginEmailPrefill.value;
+    if (prefill != null && prefill.isNotEmpty) {
+      _emailController.text = prefill;
+      loginEmailPrefill.value = null;
+    }
+  }
 
   @override
   void dispose() {
@@ -43,9 +55,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // [ s u b m i t ]
-  //validate inputs -> sign in via firebase
+  // validate inputs -> sign in via firebase
   Future<void> _submit() async {
-    //dismiss onscreen keyboard & clear old errors
+    // dismiss onscreen keyboard & clear old errors
     FocusScope.of(context).unfocus();
     setState(() => _errorMessage = null);
 
@@ -67,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // fallback generic error
       if (mounted) {
         setState(
-          () => _errorMessage = 'Something went wrong. Please try again',
+          () => _errorMessage = 'Something went wrong. Please try again.',
         );
       }
     } finally {
@@ -100,14 +112,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: GoogleFonts.poppins(
                         fontSize: 28,
                         fontWeight: FontWeight.w700,
-                        color: const Color(0xFF4A3427),
+                        color: AppColors.espresso,
                       ),
                     ),
                     const SizedBox(height: 4),
                     const Text(
                       'Stay on top of what matters',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Color(0xFF4A3427)),
+                      style: TextStyle(color: AppColors.espresso),
                     ),
                   ],
                 ),
@@ -162,7 +174,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                   child: const Text(
                     'Forgot password?',
-                    style: TextStyle(color: Color(0xFF6B7F5E), fontSize: 13),
+                    style: TextStyle(
+                      color: AppColors.oliveAccent,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ),
@@ -171,7 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
               // inline error banner
               AuthErrorBanner(message: _errorMessage),
 
-              //login submission button
+              // login submission button
               AuthPrimaryButton(
                 label: 'Login',
                 isLoading: _isLoading,
