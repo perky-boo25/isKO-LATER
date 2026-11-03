@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:isko_later/services/firestore_service.dart';
+import 'package:intl/intl.dart';
 
 import '../models/task.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 import '../services/todo_list_service.dart';
+import '../utils/app_theme.dart';
+import '../utils/task_helpers.dart';
 
 Future<void> showAddEditTaskSheet(BuildContext context, {Task? existingTask}) {
   return showModalBottomSheet<void>(
@@ -36,28 +39,6 @@ class AddEditTaskSheet extends StatefulWidget {
 
   @override
   State<AddEditTaskSheet> createState() => _AddEditTaskSheetState();
-}
-
-Color _priorityColor(Priority p) {
-  switch (p) {
-    case Priority.high:
-      return Colors.pinkAccent;
-    case Priority.medium:
-      return Colors.orangeAccent;
-    case Priority.low:
-      return Colors.blueAccent;
-  }
-}
-
-IconData tagIcon(TaskTags t) {
-  switch (t) {
-    case TaskTags.school:
-      return Icons.school;
-    case TaskTags.personal:
-      return Icons.person;
-    case TaskTags.others:
-      return Icons.label_outline;
-  }
 }
 
 class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
@@ -187,9 +168,11 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
 
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
+      // [ act4: error mapping prevents raw exception leakage ]
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not save task: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(TaskHelpers.friendlyError(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -219,18 +202,22 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
                 // The handle is both a close control and a dedicated swipe
                 // target, so the form's ListView cannot swallow the gesture.
                 Center(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _dismissSheet,
-                    onVerticalDragEnd: _dismissFromHandle,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(2),
+                  child: Semantics(
+                    button: true,
+                    label: 'Close task form',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _dismissSheet,
+                      onVerticalDragEnd: _dismissFromHandle,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
                     ),
@@ -245,7 +232,12 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _titleController,
-                  decoration: const InputDecoration(labelText: 'Title'),
+                  enabled: !_isSaving,
+                  maxLength: 500,
+                  decoration: const InputDecoration(
+                    labelText: 'Title',
+                    counterText: '',
+                  ),
                   validator: (value) => (value == null || value.trim().isEmpty)
                       ? 'Title is required'
                       : null,
@@ -257,13 +249,13 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Due date'),
                   subtitle: Text(
-                    '${_dueDateTime.year}-${_dueDateTime.month}-${_dueDateTime.day}',
+                    DateFormat('EEEE, MMM d, yyyy').format(_dueDateTime),
                   ),
                   trailing: const Icon(Icons.calendar_today),
-                  onTap: _pickDate,
+                  onTap: _isSaving ? null : _pickDate,
                 ),
                 const Divider(
-                  color: Color.fromARGB(255, 68, 39, 10),
+                  color: AppColors.espresso,
                   thickness: 0.75,
                   indent: 1,
                   endIndent: 1,
@@ -276,17 +268,17 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
                     TimeOfDay.fromDateTime(_dueDateTime).format(context),
                   ),
                   trailing: const Icon(Icons.access_time),
-                  onTap: _pickTime,
+                  onTap: _isSaving ? null : _pickTime,
                 ),
                 const Divider(
-                  color: Color.fromARGB(255, 68, 39, 10),
+                  color: AppColors.espresso,
                   thickness: 0.75,
                   indent: 1,
                   endIndent: 1,
                 ),
                 const SizedBox(height: 16),
 
-                // priority dropdown - get from enum data model
+                // priority selector - uses centralized AppColors.priorityColor
                 Text('Priority', style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: 8),
                 SegmentedButton<Priority>(
@@ -297,21 +289,32 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
                       label: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.star, size: 14, color: _priorityColor(p)),
+                          Icon(
+                            Icons.star,
+                            size: 14,
+                            color: AppColors.priorityColor(p),
+                          ),
                           const SizedBox(width: 4),
-                          Text(p.name),
+                          Flexible(
+                            child: Text(
+                              p.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
                     );
                   }).toList(),
                   selected: {_priority},
-                  onSelectionChanged: (selected) =>
-                      setState(() => _priority = selected.first),
+                  onSelectionChanged: _isSaving
+                      ? null
+                      : (selected) =>
+                            setState(() => _priority = selected.first),
                 ),
 
                 const SizedBox(height: 16),
 
-                // tag dropdown - get from enum data model
+                // tag selector - uses centralized AppColors.tagIcon
                 Text('Tag', style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: 8),
                 SegmentedButton<TaskTags>(
@@ -322,16 +325,22 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
                       label: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(tagIcon(t), size: 14),
+                          Icon(AppColors.tagIcon(t), size: 14),
                           const SizedBox(width: 4),
-                          Text(t.name),
+                          Flexible(
+                            child: Text(
+                              t.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
                     );
                   }).toList(),
                   selected: {_tag},
-                  onSelectionChanged: (selected) =>
-                      setState(() => _tag = selected.first),
+                  onSelectionChanged: _isSaving
+                      ? null
+                      : (selected) => setState(() => _tag = selected.first),
                 ),
 
                 const SizedBox(height: 24),
@@ -340,7 +349,7 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
                 ElevatedButton(
                   onPressed: _isSaving ? null : _save,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFC65A42),
+                    backgroundColor: AppColors.terracotta,
                     foregroundColor: Colors.white,
                     side: const BorderSide(width: 1.0),
                   ),
@@ -348,7 +357,10 @@ class _AddEditTaskSheetState extends State<AddEditTaskSheet> {
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : Text(
                           _isEditing ? 'Save Changes' : 'Add Task',
