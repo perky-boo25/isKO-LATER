@@ -14,15 +14,14 @@ final ValueNotifier<String?> activeListId = ValueNotifier<String?>(null);
 // Handles all reads/writes to `todo_lists` and member lookups in `users`.
 // Separated from FirestoreService so personal task CRUD stays clean and modular.
 class TodoListService {
-  final CollectionReference _listRef = FirebaseFirestore.instance.collection(
-    'todo_lists',
-  );
-  final CollectionReference _taskRef = FirebaseFirestore.instance.collection(
-    'tasks',
-  );
-  final CollectionReference _userRef = FirebaseFirestore.instance.collection(
-    'users',
-  );
+  // Firestore caps `whereIn` clauses at 30 values and WriteBatch commits at 500 ops.
+  static const int _kWhereInMax = 30;
+  static const int _kBatchMax = 500;
+
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  late final CollectionReference _listRef = _db.collection('todo_lists');
+  late final CollectionReference _taskRef = _db.collection('tasks');
+  late final CollectionReference _userRef = _db.collection('users');
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // grabs the active user's UID or throws if logged out
@@ -127,12 +126,13 @@ class TodoListService {
     required String identifier,
   }) async {
     final uid = _requireUid;
-    final queryText = identifier.trim().toLowerCase();
+    final trimmed = identifier.trim();
+    final queryText = trimmed.toLowerCase();
     if (queryText.isEmpty) {
       throw StateError('Please enter a username or email.');
     }
 
-    // 1. Fetch list and enforce owner-only check
+    // 1. Fetch list and enforce owner-only check (UBAC)
     final listDoc = await _listRef.doc(listId).get();
     if (!listDoc.exists) {
       throw StateError('Collaborative list not found.');
@@ -145,31 +145,51 @@ class TodoListService {
       throw StateError('403 Forbidden: Only the list owner can add members.');
     }
 
-    // 2. Look up target user in `users` collection by email or userName
-    // (prefers exact case-insensitive match first, then partial contains match)
-    final usersSnapshot = await _userRef.get();
-    AppUser? exactMatch;
-    AppUser? partialMatch;
-
-    for (final doc in usersSnapshot.docs) {
-      final data = doc.data() as Map<String, dynamic>?;
-      if (data == null) continue;
-      final email = (data['email'] as String? ?? '').trim().toLowerCase();
-      final userName = (data['userName'] as String? ?? '').trim().toLowerCase();
-      final candidate = _safeUserFromMap(doc.id, data);
-
-      if (email == queryText || userName == queryText) {
-        exactMatch = candidate;
-        break;
-      }
-      if (partialMatch == null &&
-          !list.hasMember(candidate.uid) &&
-          (email.contains(queryText) || userName.contains(queryText))) {
-        partialMatch = candidate;
+    // 2. [ act4: fast-path indexed email lookup before full collection scan ]
+    // When inviting via exact email (e.g. tapping "Invite" on a suggested user),
+    // query only that 1 matching user doc instead of reading all `users` docs.
+    AppUser? matchedUser;
+    if (trimmed.contains('@')) {
+      final exactEmailSnap = await _userRef
+          .where('email', isEqualTo: trimmed)
+          .limit(1)
+          .get();
+      if (exactEmailSnap.docs.isNotEmpty) {
+        final doc = exactEmailSnap.docs.first;
+        matchedUser = _safeUserFromMap(
+          doc.id,
+          doc.data() as Map<String, dynamic>,
+        );
       }
     }
 
-    final matchedUser = exactMatch ?? partialMatch;
+    // Fallback: case-insensitive / partial username or email search
+    if (matchedUser == null) {
+      final usersSnapshot = await _userRef.get();
+      AppUser? exactMatch;
+      AppUser? partialMatch;
+
+      for (final doc in usersSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        final email = (data['email'] as String? ?? '').trim().toLowerCase();
+        final userName =
+            (data['userName'] as String? ?? '').trim().toLowerCase();
+        final candidate = _safeUserFromMap(doc.id, data);
+
+        if (email == queryText || userName == queryText) {
+          exactMatch = candidate;
+          break;
+        }
+        if (partialMatch == null &&
+            !list.hasMember(candidate.uid) &&
+            (email.contains(queryText) || userName.contains(queryText))) {
+          partialMatch = candidate;
+        }
+      }
+      matchedUser = exactMatch ?? partialMatch;
+    }
+
     if (matchedUser == null) {
       throw StateError('No registered user found matching "$identifier".');
     }
@@ -231,11 +251,20 @@ class TodoListService {
       );
     }
 
-    // 1. Delete all tasks linked to this collaborative list first
-    // (must happen while todo_lists/{listId} still exists so security rules pass)
+    // 1. [ act4: atomic WriteBatch replaces N+1 sequential per-task deletes ]
+    // Must commit task deletions while `todo_lists/{listId}` still exists so
+    // `isListMember(resource.data.listId)` in firestore.rules passes cleanly.
     final tasksSnap = await _taskRef.where('listId', isEqualTo: listId).get();
-    for (final taskDoc in tasksSnap.docs) {
-      await taskDoc.reference.delete();
+    final taskDocs = tasksSnap.docs;
+    for (var i = 0; i < taskDocs.length; i += _kBatchMax) {
+      final batch = _db.batch();
+      final end = (i + _kBatchMax < taskDocs.length)
+          ? i + _kBatchMax
+          : taskDocs.length;
+      for (var j = i; j < end; j++) {
+        batch.delete(taskDocs[j].reference);
+      }
+      await batch.commit();
     }
 
     // 2. Delete the collaborative list document itself
@@ -264,18 +293,44 @@ class TodoListService {
     return users;
   }
 
-  // READ - resolves member UIDs into AppUser objects from `users/{uid}`
-  // so user names/emails are never duplicated inside task or list documents
+  // [ act4: eliminated N+1 sequential member lookup using batched `whereIn` ]
+  // READ - resolves member UIDs into AppUser objects from `users/{uid}` in a
+  // single batched query per 30 UIDs instead of looping `doc(uid).get()` N times,
+  // while keeping user names/emails normalized out of task/list documents.
   Future<List<AppUser>> getListMembers(List<String> memberIds) async {
-    final List<AppUser> members = [];
-    for (final memberUid in memberIds) {
-      final doc = await _userRef.doc(memberUid).get();
-      if (doc.exists && doc.data() != null) {
-        members.add(
-          _safeUserFromMap(doc.id, doc.data() as Map<String, dynamic>),
-        );
+    if (memberIds.isEmpty) return const [];
+    _requireUid;
+
+    // Deduplicate UIDs before querying, then chunk by Firestore's 30-item whereIn limit
+    final uniqueIds = memberIds.toSet().toList();
+    final List<Future<QuerySnapshot>> chunkQueries = [];
+    for (var i = 0; i < uniqueIds.length; i += _kWhereInMax) {
+      final chunk = uniqueIds.sublist(
+        i,
+        i + _kWhereInMax < uniqueIds.length
+            ? i + _kWhereInMax
+            : uniqueIds.length,
+      );
+      chunkQueries.add(
+        _userRef.where(FieldPath.documentId, whereIn: chunk).get(),
+      );
+    }
+
+    final snapshots = await Future.wait(chunkQueries);
+    final Map<String, AppUser> usersByUid = {};
+    for (final snap in snapshots) {
+      for (final doc in snap.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data != null) {
+          usersByUid[doc.id] = _safeUserFromMap(doc.id, data);
+        }
       }
     }
-    return members;
+
+    // Preserve the original memberIds ordering (owner first, then invited members)
+    return [
+      for (final id in memberIds)
+        if (usersByUid.containsKey(id)) usersByUid[id]!,
+    ];
   }
 }
