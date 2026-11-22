@@ -1,41 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../utils/app_theme.dart';
+import '../utils/responsive.dart';
+
 // [ v a l i d a t o r s ]
 class AuthValidators {
-  // make sure name is not empty or just spaces
   static String? requiredName(String? v) =>
       (v == null || v.trim().isEmpty) ? 'Full name is required' : null;
 
-  // basic email regex pattern
   static String? email(String? v) {
     final value = v?.trim() ?? '';
-
     if (value.isEmpty) return 'Email is required';
-
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value)) {
       return 'Enter a valid email';
     }
-
     return null;
   }
 
-  // enforce min 8 chars for new password
   static String? newPassword(String? v) {
     if (v == null || v.isEmpty) return 'Password is required';
     if (v.length < 8) return 'Password must have atleast 8 characters';
     return null;
   }
 
-  // checks if login is non-empty
   static String? existingPassword(String? v) =>
       (v == null || v.isEmpty) ? 'Password is required' : null;
 }
 
-// [ p a g e   s c r e e n ]
-
-// --------------------------------------------------------------- PAGE SHELL
-// bg photo + default color + scrollable center
+// [ p a g e   s h e l l ]
+// background photo + soft wash + centered scrollable form area
 class AuthScaffold extends StatelessWidget {
   final Widget child;
 
@@ -43,31 +37,27 @@ class AuthScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = Responsive.isCompactHeight(context);
+    final hPad = Responsive.isNarrow(context) ? 20.0 : 28.0;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF8EF), // fallback if the image fails
+      backgroundColor: AppColors.creamSurface,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // background photo (bottom layer)
           Image.asset(
             'assets/images/auth_bg.jpg',
             fit: BoxFit.cover,
             errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
-
-          // soft wash so form stays readable over photo
-          // (lower the alpha for a clearer photo, or delete this line)
-          Container(color: const Color(0xFFFFF8EF).withValues(alpha: 0.6)),
-
-          // centered scrollable form area
+          Container(color: AppColors.creamSurface.withValues(alpha: 0.6)),
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 24,
+                padding: EdgeInsets.symmetric(
+                  horizontal: hPad,
+                  vertical: compact ? 16 : 24,
                 ),
-                // cap width so layout doesn't look stretched on tablets / web
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 420),
                   child: child,
@@ -82,24 +72,33 @@ class AuthScaffold extends StatelessWidget {
 }
 
 // [ h e a d e r ]
-// app logo + serif title
+// app logo + tagline scaled to screen height
 class AuthHeader extends StatelessWidget {
   const AuthHeader({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final logoHeight = Responsive.illustrationHeight(
+      context,
+      ratio: 0.12,
+      min: 64.0,
+      max: 100.0,
+    );
+
     return Column(
       children: [
         Image.asset(
-          'assets/images/app_title.png', // Path to your title image
-          height: 100, // Adjust height to match previous font size
+          'assets/images/app_title.png',
+          height: logoHeight,
           fit: BoxFit.contain,
           errorBuilder: (_, _, _) => const SizedBox(height: 32),
         ),
-
         Text(
           'mastering the art of mamaya na',
-          style: GoogleFonts.specialElite(fontSize: 16),
+          textAlign: TextAlign.center,
+          style: GoogleFonts.specialElite(
+            fontSize: Responsive.isNarrow(context) ? 14 : 16,
+          ),
         ),
       ],
     );
@@ -107,7 +106,7 @@ class AuthHeader extends StatelessWidget {
 }
 
 // [ t e x t f i e l d ]
-// custom input field with built-in password visibility toggle
+// input field with built-in password visibility toggle
 class AuthTextField extends StatefulWidget {
   final String label;
   final String hint;
@@ -139,10 +138,8 @@ class AuthTextField extends StatefulWidget {
 }
 
 class _AuthTextFieldState extends State<AuthTextField> {
-  // password visibility toggle state
   bool _hidden = true;
 
-  // reusable rounded border style
   OutlineInputBorder _border(Color color, {double width = 1}) {
     return OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
@@ -155,22 +152,18 @@ class _AuthTextFieldState extends State<AuthTextField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // input field label
         Text(
           widget.label,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
-            color: Color(0xFF4A3427),
+            color: AppColors.espresso,
           ),
         ),
         const SizedBox(height: 6),
-
-        // input box
         TextFormField(
           controller: widget.controller,
           enabled: widget.enabled,
-          // hidden only for password fields while the eye is "off"
           obscureText: widget.isPassword && _hidden,
           keyboardType: widget.keyboardType,
           textInputAction: widget.textInputAction,
@@ -187,11 +180,9 @@ class _AuthTextFieldState extends State<AuthTextField> {
             ),
             border: _border(Colors.brown.shade200),
             enabledBorder: _border(Colors.brown.shade200),
-            focusedBorder: _border(const Color(0xFF4A3427), width: 1.5),
-            errorBorder: _border(const Color(0xFFB3261E)),
-            focusedErrorBorder: _border(const Color(0xFFB3261E), width: 1.5),
-
-            // show eye icon only if it is a password field
+            focusedBorder: _border(AppColors.espresso, width: 1.5),
+            errorBorder: _border(AppColors.errorRed),
+            focusedErrorBorder: _border(AppColors.errorRed, width: 1.5),
             suffixIcon: widget.isPassword
                 ? IconButton(
                     tooltip: _hidden ? 'Show password' : 'Hide password',
@@ -199,7 +190,7 @@ class _AuthTextFieldState extends State<AuthTextField> {
                       _hidden
                           ? Icons.visibility_outlined
                           : Icons.visibility_off_outlined,
-                      color: const Color(0xFF4A3427),
+                      color: AppColors.espresso,
                     ),
                     onPressed: () => setState(() => _hidden = !_hidden),
                   )
@@ -211,7 +202,7 @@ class _AuthTextFieldState extends State<AuthTextField> {
   }
 }
 
-// [ p r i m a r y   b u t t o n]
+// [ p r i m a r y   b u t t o n ]
 // pill-shaped brown button with built-in loading spinner
 class AuthPrimaryButton extends StatelessWidget {
   final String label;
@@ -233,15 +224,12 @@ class AuthPrimaryButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF4A3427),
+          backgroundColor: AppColors.espresso,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: const Color(0xFF4A3427)
-              .withValues(alpha: 0.6),
+          disabledBackgroundColor: AppColors.espresso.withValues(alpha: 0.6),
           disabledForegroundColor: Colors.white,
           shape: const StadiumBorder(),
         ),
-
-        //show spinner when submitting, else show button label
         child: isLoading
             ? const SizedBox(
                 width: 22,
@@ -264,7 +252,6 @@ class AuthPrimaryButton extends StatelessWidget {
 }
 
 // [ e r r o r   b a n n e r ]
-// tinted red banner for firebase auth / validation errors
 class AuthErrorBanner extends StatelessWidget {
   final String? message;
 
@@ -275,27 +262,31 @@ class AuthErrorBanner extends StatelessWidget {
     if (message == null) return const SizedBox.shrink();
 
     return Semantics(
-      liveRegion: true, // announce to screen readers when error appears
+      liveRegion: true,
       child: Container(
         width: double.infinity,
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFFB3261E).withValues(alpha: 0.08),
+          color: AppColors.errorRed.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: const Color(0xFFB3261E).withValues(alpha: 0.4),
+            color: AppColors.errorRed.withValues(alpha: 0.4),
           ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.error_outline, color: Color(0xFFB3261E), size: 20),
+            const Icon(
+              Icons.error_outline,
+              color: AppColors.errorRed,
+              size: 20,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 message!,
-                style: const TextStyle(color: Color(0xFFB3261E), fontSize: 13),
+                style: const TextStyle(color: AppColors.errorRed, fontSize: 13),
               ),
             ),
           ],
@@ -305,8 +296,7 @@ class AuthErrorBanner extends StatelessWidget {
   }
 }
 
-// [ s w i t c h  s c r e e n]
-// redirects between login and signup flows
+// [ s w i t c h   s c r e e n ]
 class AuthSwitchLink extends StatelessWidget {
   final String prompt;
   final String action;
@@ -325,13 +315,13 @@ class AuthSwitchLink extends StatelessWidget {
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(prompt, style: const TextStyle(color: Color(0xFF4A3427))),
+        Text(prompt, style: const TextStyle(color: AppColors.espresso)),
         TextButton(
           onPressed: onTap,
           child: Text(
             action,
             style: const TextStyle(
-              color: Color(0xFF6B7F5E),
+              color: AppColors.oliveAccent,
               fontWeight: FontWeight.bold,
             ),
           ),

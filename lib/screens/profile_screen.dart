@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../services/auth_service.dart';
 import '../utils/app_theme.dart';
+import '../utils/responsive.dart';
 import '../widgets/app_shared.dart';
 import '../widgets/auth_widgets.dart' show AuthValidators;
 
@@ -303,26 +304,41 @@ class _ProfileScreenState extends State<ProfileScreen>
                 const _HeaderBanner(),
 
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                    children: [
-                      _SoftCard(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 84,
-                              height: 84,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFF2EAE3),
-                                shape: BoxShape.circle,
+                  child: Responsive.constrainWidth(
+                    context,
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        Responsive.horizontalPadding(context),
+                        Responsive.isCompactHeight(context) ? 14 : 20,
+                        Responsive.horizontalPadding(context),
+                        24,
+                      ),
+                      children: [
+                        _SoftCard(
+                          padding: EdgeInsets.all(
+                            Responsive.isNarrow(context) ? 16 : 20,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: Responsive.isCompactHeight(context)
+                                    ? 68
+                                    : 84,
+                                height: Responsive.isCompactHeight(context)
+                                    ? 68
+                                    : 84,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF2EAE3),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.person_outline,
+                                  size: Responsive.isCompactHeight(context)
+                                      ? 34
+                                      : 42,
+                                  color: AppColors.espresso,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.person_outline,
-                                size: 42,
-                                color: AppColors.espresso,
-                              ),
-                            ),
                             const SizedBox(width: 20),
                             Expanded(
                               child: Column(
@@ -508,6 +524,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ],
                   ),
                 ),
+                ),
               ],
             );
           },
@@ -523,25 +540,19 @@ class _HeaderBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = Responsive.isCompactHeight(context);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 32, 20, 10),
+      padding: Responsive.headerPadding(context),
       color: AppColors.creamHeader,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Image.asset(
-                'assets/images/app_title.png',
-                height: 45,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-        ],
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Image.asset(
+          'assets/images/app_title.png',
+          height: compact ? 36 : 45,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
       ),
     );
   }
