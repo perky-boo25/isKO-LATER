@@ -60,7 +60,7 @@ Future<void> showCreateCollabListSheet(BuildContext context) async {
               controller: controller,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: 'List name',
+                labelText: 'Group name',
                 hintText: "Enter Group name",
                 filled: true,
                 fillColor: Colors.white,

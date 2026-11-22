@@ -6,14 +6,13 @@ import '../screens/profile_screen.dart';
 import '../services/auth_service.dart';
 import '../services/todo_list_service.dart';
 import '../utils/app_theme.dart';
+import '../utils/responsive.dart';
 import 'confirm_dialog.dart';
 
 enum AppTab { tasks, calendar, profile }
 
-// [ l o g o u t   &   r e t u r n   t o   r o o t ]
-// prompts user confirmation, terminates session, and resets navigation stack
+// prompts confirmation, resets active list state, and signs out to root
 Future<void> logoutAndReturnToRoot(BuildContext context) async {
-  // prompt styled logout confirmation dialog
   final confirmed = await showAppConfirmDialog(
     context,
     title: 'Log out?',
@@ -23,24 +22,12 @@ Future<void> logoutAndReturnToRoot(BuildContext context) async {
     accentColor: AppColors.logoutAmber,
   );
 
-  // user cancelled or dismissed dialog
-  if (!confirmed) return;
+  if (!confirmed || !context.mounted) return;
 
-  // guard async gap after dialog closure
-  if (!context.mounted) return;
-
-  // cache navigator reference before async signOut
   final navigator = Navigator.of(context);
-
-  // [ act3: r e s e t   a c t i v e   l i s t ]
-  // reset active list selection back to Personal (null) before ending session
-  // so the next user who logs in never inherits a previous user's list selection
   activeListId.value = null;
 
-  // sign out from firebase auth
   await AuthService().logout();
-
-  // clear backstack and drop down to root gate route
   navigator.popUntil((route) => route.isFirst);
 }
 
@@ -51,7 +38,7 @@ class AppAddTaskFAB extends StatelessWidget {
   Widget build(BuildContext context) {
     return FloatingActionButton.extended(
       onPressed: () => showAddEditTaskSheet(context),
-      backgroundColor: const Color(0xFFC65A42),
+      backgroundColor: AppColors.terracotta,
       foregroundColor: Colors.white,
       icon: const Icon(Icons.add),
       label: const Text(
@@ -67,13 +54,38 @@ class AppBottomNav extends StatelessWidget {
   final AppTab currentTab;
 
   const AppBottomNav({super.key, required this.currentTab});
+
+  // keeps stack depth at most 2 (HomeScreen -> active tab) so Back always returns to Tasks
+  void _navigateToTab(BuildContext context, AppTab target) {
+    if (target == currentTab) return;
+
+    final navigator = Navigator.of(context);
+    if (target == AppTab.tasks) {
+      navigator.popUntil((route) => route.isFirst);
+      return;
+    }
+
+    final Widget screen = target == AppTab.calendar
+        ? const CalendarScreen()
+        : const ProfileScreen();
+    final route = MaterialPageRoute(builder: (_) => screen);
+
+    if (currentTab == AppTab.tasks) {
+      navigator.push(route);
+    } else {
+      navigator.pushReplacement(route);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final compact = Responsive.isCompactHeight(context);
+
     return SafeArea(
       top: false,
       child: Container(
-        color: const Color(0xFFFCE8CB),
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        color: AppColors.creamHeader,
+        padding: EdgeInsets.symmetric(vertical: compact ? 6 : 10),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
@@ -81,36 +93,19 @@ class AppBottomNav extends StatelessWidget {
               icon: Icons.list_alt,
               label: 'Tasks',
               selected: currentTab == AppTab.tasks,
-              onTap: () {
-                if (currentTab == AppTab.tasks) return;
-                Navigator.popUntil(context, (route) => route.isFirst);
-              },
+              onTap: () => _navigateToTab(context, AppTab.tasks),
             ),
             _NavItem(
               icon: Icons.calendar_month_outlined,
               label: 'Calendar',
               selected: currentTab == AppTab.calendar,
-              onTap: () {
-                if (currentTab == AppTab.calendar) return;
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CalendarScreen()),
-                );
-              },
+              onTap: () => _navigateToTab(context, AppTab.calendar),
             ),
             _NavItem(
               icon: Icons.person_outline,
               label: 'Profile',
               selected: currentTab == AppTab.profile,
-              onTap: () {
-                if (currentTab == AppTab.profile) return;
-
-                // Push the Profile screen instead of popping to root
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                );
-              },
+              onTap: () => _navigateToTab(context, AppTab.profile),
             ),
           ],
         ),
@@ -134,25 +129,39 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFF1DDBE) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: const Color(0xFF4A3427)),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: const TextStyle(color: Color(0xFF4A3427), fontSize: 12),
-            ),
-          ],
+    final narrow = Responsive.isNarrow(context);
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$label tab',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: narrow ? 12 : 16,
+            vertical: 8,
+          ),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.navSelectedFill : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: AppColors.espresso),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: AppColors.espresso,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
