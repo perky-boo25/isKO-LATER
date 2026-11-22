@@ -9,7 +9,7 @@ import 'screens/auth_gate.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // conection to firebase backend
+  // connection to firebase backend
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const IskoLaterApp());
 }
@@ -29,7 +29,20 @@ class IskoLaterApp extends StatelessWidget {
         textTheme: GoogleFonts.dmSansTextTheme(),
       ),
 
-      //first screen to launch
+      // clamp extreme OS font scaling so text never overflows cards or buttons
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        final scaler = mq.textScaler.clamp(
+          minScaleFactor: 0.85,
+          maxScaleFactor: 1.20,
+        );
+        return MediaQuery(
+          data: mq.copyWith(textScaler: scaler),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+
+      // first screen to launch
       home: const AuthGate(),
     );
   }
