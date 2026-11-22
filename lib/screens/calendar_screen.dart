@@ -9,12 +9,12 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/todo_list_service.dart';
 import '../utils/app_theme.dart';
+import '../utils/responsive.dart';
 import '../utils/task_helpers.dart';
 import '../widgets/app_shared.dart';
 import '../widgets/task_card.dart';
 import 'add_edit_task.dart';
 
-// Filter constants for Calendar view
 const String _kFilterAll = '__all__';
 const String _kFilterPersonal = '__personal__';
 
@@ -26,17 +26,23 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  // [ act4: reuse single service instances across rebuilds ]
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
   final TodoListService _todoListService = TodoListService();
 
   DateTime _selectedDay = DateTime.now();
-  // Default to showing all merged tasks (Personal + Collaborative)
   String _selectedFilter = _kFilterAll;
 
-  // Filters the merged task list based on the user's selected filter dropdown
-  List<Task> _applyListFilter(List<Task> allTasks, String filter) {
+  // keeps the active filter valid even if a shared list was deleted
+  String _resolveActiveFilter(List<String> collabIds) {
+    final isKnown =
+        _selectedFilter == _kFilterAll ||
+        _selectedFilter == _kFilterPersonal ||
+        collabIds.contains(_selectedFilter);
+    return isKnown ? _selectedFilter : _kFilterAll;
+  }
+
+  List<Task> _filterTasksByList(List<Task> allTasks, String filter) {
     if (filter == _kFilterAll) return allTasks;
     if (filter == _kFilterPersonal) {
       return allTasks.where((t) => t.listId == null).toList();
@@ -51,14 +57,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return match?.name ?? 'All Tasks';
   }
 
+  List<Task> _tasksForSelectedDay(List<Task> tasks) {
+    final targetDay = TaskHelpers.dayOnly(_selectedDay);
+    final matching = tasks
+        .where((t) => TaskHelpers.dayOnly(t.dueDateTime) == targetDay)
+        .toList();
+    return TaskHelpers.sortWithDoneAtBottom(matching);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.creamSurface,
       body: SafeArea(
-        // [ u b a c   m e r g e d   c a l e n d a r   s t r e a m ]
-        // Streams the user's accessible collaborative lists, then merges all
-        // personal + collaborative tasks with a simple list filter selector.
         child: StreamBuilder<User?>(
           stream: _authService.authStateChanges,
           initialData: _authService.currentUser,
@@ -69,70 +80,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               stream: _todoListService.streamCollaborativeLists(),
               builder: (context, listSnap) {
                 final collabLists = listSnap.data ?? [];
-                final collabIds = collabLists.map((l) => l.id).toList();
-
-                // If the user was filtering by a collab list that no longer exists,
-                // fall back to showing All Tasks
-                final activeFilter =
-                    (_selectedFilter == _kFilterAll ||
-                        _selectedFilter == _kFilterPersonal ||
-                        collabIds.contains(_selectedFilter))
-                    ? _selectedFilter
-                    : _kFilterAll;
-
-                return StreamBuilder<List<Task>>(
-                  key: ValueKey('${uid}_${collabIds.join(",")}'),
-                  stream: _firestoreService.streamAllUserAndCollabTasks(
-                    collabIds,
-                  ),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(
-                            TaskHelpers.friendlyError(
-                              snapshot.error!,
-                              fallback: 'Could not load calendar tasks.',
-                            ),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: AppColors.errorRed),
-                          ),
-                        ),
-                      );
-                    }
-
-                    final allTasks = snapshot.data ?? [];
-                    final filteredTasks = _applyListFilter(
-                      allTasks,
-                      activeFilter,
-                    );
-
-                    // grouped by day, used to filter the list under the calendar
-                    final Map<DateTime, List<Task>> tasksByDay = {};
-                    for (final t in filteredTasks) {
-                      final key = TaskHelpers.dayOnly(t.dueDateTime);
-                      tasksByDay.putIfAbsent(key, () => []).add(t);
-                    }
-
-                    final selectedTasks = TaskHelpers.sortWithDoneAtBottom(
-                      tasksByDay[TaskHelpers.dayOnly(_selectedDay)] ?? [],
-                    );
-
-                    return Column(
-                      children: [
-                        _buildHeader(),
-                        _buildFilterBar(collabLists, activeFilter),
-                        _buildCalendar(filteredTasks),
-                        const SizedBox(height: 8),
-                        Expanded(child: _buildTaskList(selectedTasks)),
-                      ],
-                    );
-                  },
-                );
+                return _buildMergedTasksStream(uid, collabLists);
               },
             );
           },
@@ -144,34 +92,124 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // "calendar" title bar kept clean as in Lab 1
-  Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-      color: AppColors.creamHeader,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  // streams personal + collaborative tasks and renders the responsive layout
+  Widget _buildMergedTasksStream(String? uid, List<TodoList> collabLists) {
+    final collabIds = collabLists.map((l) => l.id).toList();
+    final activeFilter = _resolveActiveFilter(collabIds);
+
+    return StreamBuilder<List<Task>>(
+      key: ValueKey('${uid}_${collabIds.join(",")}'),
+      stream: _firestoreService.streamAllUserAndCollabTasks(collabIds),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                TaskHelpers.friendlyError(
+                  snapshot.error!,
+                  fallback: 'Could not load calendar tasks.',
+                ),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.errorRed),
+              ),
+            ),
+          );
+        }
+
+        final filteredTasks = _filterTasksByList(
+          snapshot.data ?? [],
+          activeFilter,
+        );
+        final selectedTasks = _tasksForSelectedDay(filteredTasks);
+
+        return _buildResponsiveBody(
+          context,
+          collabLists: collabLists,
+          activeFilter: activeFilter,
+          filteredTasks: filteredTasks,
+          selectedTasks: selectedTasks,
+        );
+      },
+    );
+  }
+
+  // switches to a single scrollable page on very short/landscape screens
+  Widget _buildResponsiveBody(
+    BuildContext context, {
+    required List<TodoList> collabLists,
+    required String activeFilter,
+    required List<Task> filteredTasks,
+    required List<Task> selectedTasks,
+  }) {
+    if (Responsive.isShortViewport(context)) {
+      return ListView(
+        padding: const EdgeInsets.only(bottom: 90),
         children: [
-          Text(
-            'Calendar 𖤓',
-            style: GoogleFonts.dmSerifDisplay(
-              textStyle: Theme.of(context).textTheme.headlineSmall,
-              color: AppColors.espresso,
-              fontSize: 30,
-              fontWeight: FontWeight.bold,
+          _buildHeader(context),
+          Responsive.constrainWidth(
+            context,
+            child: Column(
+              children: [
+                _buildFilterBar(context, collabLists, activeFilter),
+                _buildCalendar(context, filteredTasks),
+                const SizedBox(height: 8),
+                _buildTaskList(selectedTasks, shrinkWrap: true),
+              ],
             ),
           ),
         ],
+      );
+    }
+
+    return Column(
+      children: [
+        _buildHeader(context),
+        Expanded(
+          child: Responsive.constrainWidth(
+            context,
+            child: Column(
+              children: [
+                _buildFilterBar(context, collabLists, activeFilter),
+                _buildCalendar(context, filteredTasks),
+                const SizedBox(height: 8),
+                Expanded(child: _buildTaskList(selectedTasks)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: Responsive.headerPadding(context),
+      color: AppColors.creamHeader,
+      child: Text(
+        'Calendar 𖤓',
+        style: GoogleFonts.dmSerifDisplay(
+          textStyle: Theme.of(context).textTheme.headlineSmall,
+          color: AppColors.espresso,
+          fontSize: Responsive.headerTitleSize(context),
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
 
-  // Normal dropdown that always opens strictly downward below the field
-  // (using PopupMenuPosition.under so selecting a group never covers the header)
-  Widget _buildFilterBar(List<TodoList> collabLists, String activeFilter) {
+  Widget _buildFilterBar(
+    BuildContext context,
+    List<TodoList> collabLists,
+    String activeFilter,
+  ) {
+    final hPad = Responsive.horizontalPadding(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+      padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 8),
       child: LayoutBuilder(
         builder: (context, constraints) {
           return PopupMenuButton<String>(
@@ -186,42 +224,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
             onSelected: (val) => setState(() => _selectedFilter = val),
             itemBuilder: (context) => [
-              const PopupMenuItem<String>(
-                value: _kFilterAll,
-                child: Text(
-                  'All Tasks',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.espresso,
-                  ),
-                ),
-              ),
-              const PopupMenuItem<String>(
-                value: _kFilterPersonal,
-                child: Text(
-                  'Personal To-Do List',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.espresso,
-                  ),
-                ),
-              ),
-              ...collabLists.map(
-                (list) => PopupMenuItem<String>(
-                  value: list.id,
-                  child: Text(
-                    list.name,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.espresso,
-                    ),
-                  ),
-                ),
-              ),
+              _buildFilterItem(_kFilterAll, 'All Tasks'),
+              _buildFilterItem(_kFilterPersonal, 'Personal To-Do List'),
+              ...collabLists.map((l) => _buildFilterItem(l.id, l.name)),
             ],
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: AppColors.creamSurface,
                 borderRadius: BorderRadius.circular(12),
@@ -253,12 +261,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // syncfusion month view — dots are drawn automatically per day based on
-  // how many appointments (tasks) fall on that date in the data source
-  Widget _buildCalendar(List<Task> tasks) {
+  PopupMenuItem<String> _buildFilterItem(String value, String label) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Text(
+        label,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+          color: AppColors.espresso,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCalendar(BuildContext context, List<Task> tasks) {
+    final hPad = Responsive.horizontalPadding(context);
+    final compact = Responsive.isCompactHeight(context);
+
     return Container(
-      height: 360,
-      margin: const EdgeInsets.symmetric(horizontal: 20),
+      height: Responsive.calendarHeight(context),
+      margin: EdgeInsets.symmetric(horizontal: hPad),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
@@ -269,15 +292,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
         initialSelectedDate: _selectedDay,
         showNavigationArrow: true,
         showDatePickerButton: false,
-        headerStyle: const CalendarHeaderStyle(
+        headerHeight: compact ? 36 : 42,
+        headerStyle: CalendarHeaderStyle(
           textAlign: TextAlign.center,
-          backgroundColor: Color.fromARGB(255, 255, 227, 205),
+          backgroundColor: const Color.fromARGB(255, 255, 227, 205),
           textStyle: TextStyle(
             color: AppColors.espresso,
             fontWeight: FontWeight.bold,
-            fontSize: 18,
+            fontSize: compact ? 16 : 18,
           ),
         ),
+        viewHeaderHeight: compact ? 22 : 28,
         viewHeaderStyle: const ViewHeaderStyle(
           dayTextStyle: TextStyle(color: Colors.grey, fontSize: 12),
         ),
@@ -287,13 +312,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
           border: Border.all(color: AppColors.espresso, width: 1.5),
           borderRadius: BorderRadius.circular(8),
         ),
-        monthViewSettings: const MonthViewSettings(
-          showAgenda: false, // we render our own task list below instead
-          appointmentDisplayMode:
-              MonthAppointmentDisplayMode.indicator, // dots, not bars
+        monthViewSettings: MonthViewSettings(
+          showAgenda: false,
+          appointmentDisplayMode: MonthAppointmentDisplayMode.indicator,
           showTrailingAndLeadingDates: true,
           monthCellStyle: MonthCellStyle(
-            textStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 15.0),
+            textStyle: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: compact ? 13.0 : 15.0,
+            ),
           ),
         ),
         onTap: (CalendarTapDetails details) {
@@ -304,19 +331,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // tasks due on whichever day is currently selected
-  Widget _buildTaskList(List<Task> tasks) {
+  Widget _buildTaskList(List<Task> tasks, {bool shrinkWrap = false}) {
     if (tasks.isEmpty) {
-      return Center(
-        child: Text(
-          'No tasks on this day ★',
-          style: TextStyle(color: Colors.grey.shade500),
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: shrinkWrap ? 24 : 0),
+        child: Center(
+          child: Text(
+            'No tasks on this day ★',
+            style: TextStyle(color: Colors.grey.shade500),
+          ),
         ),
       );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.only(top: 4, bottom: 90),
+      shrinkWrap: shrinkWrap,
+      physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+      padding: EdgeInsets.only(top: 4, bottom: shrinkWrap ? 16 : 90),
       itemCount: tasks.length,
       itemBuilder: (context, i) {
         final task = tasks[i];
@@ -340,8 +371,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 }
 
-// adapts our Task list into Appointment objects, which is what drives
-// syncfusion's dot markers under each day in month view
 class _TaskDataSource extends CalendarDataSource {
   _TaskDataSource(List<Task> tasks) {
     appointments = tasks
@@ -350,7 +379,6 @@ class _TaskDataSource extends CalendarDataSource {
             startTime: t.dueDateTime,
             endTime: t.dueDateTime.add(const Duration(hours: 1)),
             subject: t.title,
-            // [ act4: uses centralized AppColors.priorityColor ]
             color: AppColors.priorityColor(t.priority),
           ),
         )
