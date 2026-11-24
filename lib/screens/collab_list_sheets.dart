@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/todo_list.dart';
 import '../models/user.dart';
 import '../services/todo_list_service.dart';
+import '../utils/task_helpers.dart';
 import '../widgets/confirm_dialog.dart';
 
 // [ 1 .   c r e a t e   c o l l a b o r a t i v e   l i s t   s h e e t ]
@@ -123,8 +124,9 @@ Future<void> showCreateCollabListSheet(BuildContext context) async {
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not create list: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(TaskHelpers.friendlyError(e))),
+      );
     }
   }
 }
@@ -254,7 +256,7 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
         setState(() {
           _isAdding = false;
           _isError = true;
-          _feedbackMessage = e.toString().replaceFirst('Bad state: ', '');
+          _feedbackMessage = TaskHelpers.friendlyError(e);
         });
       }
     }
@@ -290,7 +292,7 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
       if (mounted) {
         setState(() {
           _isError = true;
-          _feedbackMessage = e.toString().replaceFirst('Bad state: ', '');
+          _feedbackMessage = TaskHelpers.friendlyError(e);
         });
       }
     }
@@ -327,7 +329,7 @@ class _CollabMembersSheetState extends State<CollabMembersSheet> {
         setState(() {
           _isDeletingList = false;
           _isError = true;
-          _feedbackMessage = e.toString().replaceFirst('Bad state: ', '');
+          _feedbackMessage = TaskHelpers.friendlyError(e);
         });
       }
     }
