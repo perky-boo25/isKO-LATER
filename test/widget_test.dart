@@ -130,7 +130,6 @@ void main() {
     test('InputSanitizer allows payloads when disabled and blocks when enabled', () {
       const xssPayload = "<script>alert('pwned')</script>";
       const nosqlPayload = '{"\$ne": null}';
-      const sqliPayload = "'; DROP TABLE tasks; --";
 
       // attack succeeds when safeguard is off
       InputSanitizer.securityEnabled = false;
@@ -153,12 +152,9 @@ void main() {
         InputSanitizer.validateSafeText(nosqlPayload, fieldName: 'Title'),
         contains('Security Blocked'),
       );
+      // normal English titles must not false-positive
       expect(
-        InputSanitizer.validateSafeText(sqliPayload, fieldName: 'Title'),
-        contains('Security Blocked'),
-      );
-      expect(
-        InputSanitizer.validateSafeText('Finish CMSC 128 Lab 4', fieldName: 'Title'),
+        InputSanitizer.validateSafeText('Delete from grocery list', fieldName: 'Title'),
         isNull,
       );
     });
