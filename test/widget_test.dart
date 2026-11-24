@@ -2,10 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:isko_later/models/task.dart';
 import 'package:isko_later/models/todo_list.dart';
+import 'package:isko_later/utils/input_sanitizer.dart';
 import 'package:isko_later/utils/task_helpers.dart';
 import 'package:isko_later/widgets/auth_widgets.dart';
 
-// [ act4: replaced broken template counter test with model & helper unit tests ]
+// unit tests for task sorting, UBAC helpers, validators, and input pentesting
 void main() {
   group('TaskHelpers & UBAC Model Unit Tests', () {
     test(
@@ -123,6 +124,42 @@ void main() {
       expect(
         TaskHelpers.friendlyError(err),
         '403 Forbidden: You do not own this task.',
+      );
+    });
+
+    test('InputSanitizer allows payloads when disabled and blocks when enabled', () {
+      const xssPayload = "<script>alert('pwned')</script>";
+      const nosqlPayload = '{"\$ne": null}';
+      const sqliPayload = "'; DROP TABLE tasks; --";
+
+      // attack succeeds when safeguard is off
+      InputSanitizer.securityEnabled = false;
+      expect(
+        InputSanitizer.validateSafeText(xssPayload, fieldName: 'Title'),
+        isNull,
+      );
+      expect(
+        InputSanitizer.validateSafeText(nosqlPayload, fieldName: 'Title'),
+        isNull,
+      );
+
+      // attack is blocked when safeguard is on
+      InputSanitizer.securityEnabled = true;
+      expect(
+        InputSanitizer.validateSafeText(xssPayload, fieldName: 'Title'),
+        contains('Security Blocked'),
+      );
+      expect(
+        InputSanitizer.validateSafeText(nosqlPayload, fieldName: 'Title'),
+        contains('Security Blocked'),
+      );
+      expect(
+        InputSanitizer.validateSafeText(sqliPayload, fieldName: 'Title'),
+        contains('Security Blocked'),
+      );
+      expect(
+        InputSanitizer.validateSafeText('Finish CMSC 128 Lab 4', fieldName: 'Title'),
+        isNull,
       );
     });
   });

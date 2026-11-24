@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../utils/app_theme.dart';
+import '../utils/input_sanitizer.dart';
 import '../utils/responsive.dart';
 
 // [ v a l i d a t o r s ]
 class AuthValidators {
-  static String? requiredName(String? v) =>
-      (v == null || v.trim().isEmpty) ? 'Full name is required' : null;
+  static String? requiredName(String? v) => InputSanitizer.validateSafeText(
+    v,
+    fieldName: 'Full name',
+    maxLength: 100,
+  );
 
   static String? email(String? v) {
     final value = v?.trim() ?? '';

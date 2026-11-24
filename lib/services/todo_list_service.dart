@@ -4,17 +4,13 @@ import 'package:flutter/foundation.dart';
 
 import '../models/todo_list.dart';
 import '../models/user.dart';
+import '../utils/input_sanitizer.dart';
 
-// [ a c t i v e   l i s t   s t a t e ]
-// Holds the currently selected list ID across HomeScreen, CalendarScreen, and AddEditTaskSheet.
-// null = Personal To-Do List; non-null = Collaborative TodoList document ID.
+// currently selected list ID (`null` = Personal To-Do List, non-null = shared list ID)
 final ValueNotifier<String?> activeListId = ValueNotifier<String?>(null);
 
-// [ c o l l a b o r a t i v e   l i s t   s e r v i c e ]
-// Handles all reads/writes to `todo_lists` and member lookups in `users`.
-// Separated from FirestoreService so personal task CRUD stays clean and modular.
+// handles all reads/writes to `todo_lists` and member lookups in `users`
 class TodoListService {
-  // Firestore caps `whereIn` clauses at 30 values and WriteBatch commits at 500 ops.
   static const int _kWhereInMax = 30;
   static const int _kBatchMax = 500;
 
@@ -24,7 +20,6 @@ class TodoListService {
   late final CollectionReference _userRef = _db.collection('users');
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // grabs the active user's UID or throws if logged out
   String get _requireUid {
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
@@ -35,8 +30,7 @@ class TodoListService {
     return uid;
   }
 
-  // Safely parses a `users/{uid}` document even if `createdAt` was omitted
-  // during a profile sync (`syncProfileToFirestore`).
+  // parses a `users/{uid}` doc safely even if `createdAt` was omitted during sync
   AppUser _safeUserFromMap(String uid, Map<String, dynamic> map) {
     final rawCreatedAt = map['createdAt'];
     return AppUser(
@@ -49,8 +43,7 @@ class TodoListService {
     );
   }
 
-  // [ u b a c   m e m b e r s h i p   c h e c k ]
-  // Verifies that the logged-in user is in `todo_lists/{listId}.memberIds`
+  // verifies that the logged-in user is in `todo_lists/{listId}.memberIds`
   Future<void> verifyMembership(String listId) async {
     final uid = _requireUid;
     final listDoc = await _listRef.doc(listId).get();
@@ -68,8 +61,7 @@ class TodoListService {
     }
   }
 
-  // READ - live stream of collaborative lists where the logged-in user is in memberIds.
-  // Users NEVER receive lists they have not been added to.
+  // READ - streams collaborative lists where the logged-in user is a member
   Stream<List<TodoList>> streamCollaborativeLists() {
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
@@ -97,16 +89,17 @@ class TodoListService {
   // CREATE - creates a new collaborative list owned by currentUser
   Future<TodoList> createCollaborativeList(String name) async {
     final uid = _requireUid;
-    final cleanName = name.trim();
-    if (cleanName.isEmpty) {
-      throw StateError('List name cannot be empty.');
-    }
+    final cleanName = InputSanitizer.enforceSafeText(
+      name,
+      fieldName: 'List name',
+      maxLength: 100,
+    );
 
     final newList = TodoList(
       id: '',
       name: cleanName,
       ownerId: uid,
-      memberIds: [uid], // owner is the initial member
+      memberIds: [uid],
       createdAt: DateTime.now(),
     );
 
@@ -120,7 +113,7 @@ class TodoListService {
     );
   }
 
-  // UPDATE - allows ONLY the list owner to invite another user by username or email
+  // UPDATE - owner-only invite by username or email
   Future<AppUser> addMemberByEmailOrUsername({
     required String listId,
     required String identifier,
@@ -132,7 +125,6 @@ class TodoListService {
       throw StateError('Please enter a username or email.');
     }
 
-    // 1. Fetch list and enforce owner-only check (UBAC)
     final listDoc = await _listRef.doc(listId).get();
     if (!listDoc.exists) {
       throw StateError('Collaborative list not found.');
@@ -145,9 +137,7 @@ class TodoListService {
       throw StateError('403 Forbidden: Only the list owner can add members.');
     }
 
-    // 2. [ act4: fast-path indexed email lookup before full collection scan ]
-    // When inviting via exact email (e.g. tapping "Invite" on a suggested user),
-    // query only that 1 matching user doc instead of reading all `users` docs.
+    // fast-path: indexed email lookup before falling back to collection scan
     AppUser? matchedUser;
     if (trimmed.contains('@')) {
       final exactEmailSnap = await _userRef
@@ -163,7 +153,7 @@ class TodoListService {
       }
     }
 
-    // Fallback: case-insensitive / partial username or email search
+    // fallback: case-insensitive / partial username or email search
     if (matchedUser == null) {
       final usersSnapshot = await _userRef.get();
       AppUser? exactMatch;
@@ -198,7 +188,6 @@ class TodoListService {
       throw StateError('${matchedUser.userName} is already in this list.');
     }
 
-    // 3. Add target user's UID to memberIds array
     await _listRef.doc(listId).update({
       'memberIds': FieldValue.arrayUnion([matchedUser.uid]),
     });
@@ -206,7 +195,7 @@ class TodoListService {
     return matchedUser;
   }
 
-  // UPDATE - allows ONLY the list owner to remove a collaborator from memberIds
+  // UPDATE - owner-only collaborator removal
   Future<void> removeMemberFromList({
     required String listId,
     required String memberUid,
@@ -234,7 +223,7 @@ class TodoListService {
     });
   }
 
-  // DELETE - allows ONLY the list owner to delete a collaborative list and its tasks
+  // DELETE - owner-only cascade delete of tasks (via WriteBatch) and the list doc
   Future<void> deleteCollaborativeList(String listId) async {
     final uid = _requireUid;
     final listDoc = await _listRef.doc(listId).get();
@@ -251,9 +240,6 @@ class TodoListService {
       );
     }
 
-    // 1. [ act4: atomic WriteBatch replaces N+1 sequential per-task deletes ]
-    // Must commit task deletions while `todo_lists/{listId}` still exists so
-    // `isListMember(resource.data.listId)` in firestore.rules passes cleanly.
     final tasksSnap = await _taskRef.where('listId', isEqualTo: listId).get();
     final taskDocs = tasksSnap.docs;
     for (var i = 0; i < taskDocs.length; i += _kBatchMax) {
@@ -267,16 +253,14 @@ class TodoListService {
       await batch.commit();
     }
 
-    // 2. Delete the collaborative list document itself
     await _listRef.doc(listId).delete();
 
-    // 3. Reset activeListId to Personal list if viewing the deleted list
     if (activeListId.value == listId) {
       activeListId.value = null;
     }
   }
 
-  // READ - fetches all registered AppUsers from `users` for live autocomplete suggestions
+  // READ - fetches registered users for collaborator autocomplete suggestions
   Future<List<AppUser>> getAllUsers() async {
     _requireUid;
     final snap = await _userRef.get();
@@ -293,15 +277,11 @@ class TodoListService {
     return users;
   }
 
-  // [ act4: eliminated N+1 sequential member lookup using batched `whereIn` ]
-  // READ - resolves member UIDs into AppUser objects from `users/{uid}` in a
-  // single batched query per 30 UIDs instead of looping `doc(uid).get()` N times,
-  // while keeping user names/emails normalized out of task/list documents.
+  // READ - resolves member UIDs in batches of 30 (`whereIn`) to avoid N+1 queries
   Future<List<AppUser>> getListMembers(List<String> memberIds) async {
     if (memberIds.isEmpty) return const [];
     _requireUid;
 
-    // Deduplicate UIDs before querying, then chunk by Firestore's 30-item whereIn limit
     final uniqueIds = memberIds.toSet().toList();
     final List<Future<QuerySnapshot>> chunkQueries = [];
     for (var i = 0; i < uniqueIds.length; i += _kWhereInMax) {
@@ -327,7 +307,6 @@ class TodoListService {
       }
     }
 
-    // Preserve the original memberIds ordering (owner first, then invited members)
     return [
       for (final id in memberIds)
         if (usersByUid.containsKey(id)) usersByUid[id]!,

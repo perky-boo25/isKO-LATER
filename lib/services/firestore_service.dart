@@ -2,23 +2,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/task.dart';
+import '../utils/input_sanitizer.dart';
 import 'todo_list_service.dart';
 
-// handles all reads/writes to the tasks collection in firestore
+// handles all reads and writes to the `tasks` collection in Firestore
 class FirestoreService {
-  // Firestore caps `whereIn` clauses inside `Filter.or` at 30 items.
   static const int _kWhereInMax = 30;
 
   final CollectionReference _taskRef = FirebaseFirestore.instance.collection(
     'tasks',
   );
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  // [ act4: reuse single TodoListService instance instead of recreating per call ]
   final TodoListService _todoListService = TodoListService();
 
-  // [ s e s s i o n   g u a r d ]
-  // grabs the active user's UID or blocks the operation if no one is logged in
+  // returns the active user's UID or throws if signed out
   String get _requireUid {
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
@@ -27,9 +24,7 @@ class FirestoreService {
     return uid;
   }
 
-  // [ act3: ubac verification for ownership ]
-  // prevents IDOR by verifying the logged-in user's UID matches the task's ownerId
-  // (or verifies list membership if the task belongs to a collaborative list)
+  // verifies task ownership (personal) or list membership (collaborative)
   Future<void> _verifyOwnership(Task task) async {
     final uid = _requireUid;
     if (task.listId != null) {
@@ -41,9 +36,7 @@ class FirestoreService {
     }
   }
 
-  // [ act4: centralized snapshot parser & sorter ]
-  // Deduplicates Task.fromMap deserialization, soft-delete filtering, ID
-  // deduplication, and newest-first sorting across personal and merged streams.
+  // deserializes snapshot docs, skips soft-deleted tasks, and sorts newest first
   List<Task> _parseAndSortTasks(
     QuerySnapshot snapshot, {
     required bool Function(Task task) include,
@@ -64,34 +57,32 @@ class FirestoreService {
     return tasks;
   }
 
-  // CREATE - adding a Task, stamping the logged-in user's UID as ownerId
+  // CREATE - stamps the logged-in user's UID as ownerId and validates input
   Future<void> addTask(Task task) async {
     final uid = _requireUid;
-    // force ownerId to be the authenticated user's UID so it cannot be spoofed
-    final ownedTask = task.copyWith(ownerId: uid, title: task.title.trim());
+    final safeTitle = InputSanitizer.enforceSafeText(
+      task.title,
+      fieldName: 'Title',
+    );
+    final ownedTask = task.copyWith(ownerId: uid, title: safeTitle);
     if (ownedTask.listId != null) {
       await _todoListService.verifyMembership(ownedTask.listId!);
     }
     await _taskRef.add(ownedTask.toMap());
   }
 
-  // READ - a live stream of the logged-in user's personal tasks (or shared list tasks)
+  // READ - live stream of personal tasks (listId == null) or shared list tasks
   Stream<List<Task>> streamTasks({String? listId}) {
     final uid = _auth.currentUser?.uid;
-    // if logged out, emit an empty list immediately instead of querying all tasks
     if (uid == null || uid.isEmpty) {
       return Stream.value(const []);
     }
 
     final isCollabList = listId != null && listId.isNotEmpty;
-
-    // if a collaborative list is selected, query tasks belonging to that listId;
-    // otherwise query personal tasks where ownerId == uid
     final query = isCollabList
         ? _taskRef.where('listId', isEqualTo: listId)
         : _taskRef.where('ownerId', isEqualTo: uid);
 
-    // [ u b a c   q u e r y   f i l t e r ]
     return query.snapshots().map(
       (snapshot) => _parseAndSortTasks(
         snapshot,
@@ -101,9 +92,7 @@ class FirestoreService {
     );
   }
 
-  // [ c a l e n d a r   m e r g e d   s t r e a m ]
-  // Streams all personal tasks + all tasks from the user's collaborative lists,
-  // merged and deduplicated by task ID in a single `Filter.or` query.
+  // READ - merged stream of personal tasks + collaborative list tasks for Calendar
   Stream<List<Task>> streamAllUserAndCollabTasks(List<String> collabListIds) {
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
@@ -111,8 +100,6 @@ class FirestoreService {
     }
 
     final validIds = collabListIds.toSet().take(_kWhereInMax).toList();
-
-    // If the user has no collaborative lists, only stream their owned personal tasks
     if (validIds.isEmpty) {
       return _taskRef.where('ownerId', isEqualTo: uid).snapshots().map(
             (snap) => _parseAndSortTasks(
@@ -122,7 +109,6 @@ class FirestoreService {
           );
     }
 
-    // Merge owned tasks + collaborative list tasks reactively in 1 query
     return _taskRef
         .where(
           Filter.or(
@@ -140,7 +126,7 @@ class FirestoreService {
         );
   }
 
-  // UPDATE - toggling completion state
+  // UPDATE - toggles task completion status
   Future<void> toggleTaskDone(Task task) async {
     await _verifyOwnership(task);
     final newIsDone = !task.isDone;
@@ -150,20 +136,22 @@ class FirestoreService {
     });
   }
 
-  // [ act4: payload optimization — send only mutable form fields ]
-  // UPDATE - saves edited task fields without re-sending immutable ownership
-  // (`ownerId`, `listId`, `createdAt`) or overwriting concurrent `isDone` state.
+  // UPDATE - sends only mutable form fields to reduce payload size
   Future<void> updateTask(Task task) async {
     await _verifyOwnership(task);
+    final safeTitle = InputSanitizer.enforceSafeText(
+      task.title,
+      fieldName: 'Title',
+    );
     await _taskRef.doc(task.id).update({
-      'title': task.title.trim(),
+      'title': safeTitle,
       'dueDateTime': Timestamp.fromDate(task.dueDateTime),
       'priority': task.priority.name,
       'tag': task.tag.name,
     });
   }
 
-  // DELETE - soft-deleting a task
+  // DELETE - soft-deletes a task by stamping deletedAt
   Future<void> softDelete(Task task) async {
     await _verifyOwnership(task);
     await _taskRef.doc(task.id).update({
@@ -171,7 +159,7 @@ class FirestoreService {
     });
   }
 
-  // UNDO DELETE - restoring a soft-deleted task
+  // UNDO DELETE - restores a soft-deleted task
   Future<void> undoDelete(Task task) async {
     await _verifyOwnership(task);
     await _taskRef.doc(task.id).update({'deletedAt': null});
