@@ -1,181 +1,251 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../models/task.dart';
+import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
-import '../widgets/task_card.dart';
+import '../services/todo_list_service.dart';
+import '../utils/app_theme.dart';
+import '../utils/responsive.dart';
+import '../utils/task_helpers.dart';
 import '../widgets/app_shared.dart';
+import '../widgets/list_switcher_bar.dart';
+import '../widgets/task_card.dart';
 import 'add_edit_task.dart';
 
-// the app's default screen. This IS the task list for now —
-
-class HomeScreen extends StatelessWidget {
+// default screen displaying the user's personal or shared task list
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
+
+  @override
   Widget build(BuildContext context) {
+    final hPad = Responsive.horizontalPadding(context);
+
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            const _HomeHeader(),
+            _HomeHeader(authService: _authService),
 
-            // Show the list if we have tasks, otherwise show the empty state
+            // key the task stream by uid so switching accounts resets the list
             Expanded(
-              child: StreamBuilder<List<Task>>(
-                stream: FirestoreService().streamTasks(),
-                builder: (context, snapshot) {
-                  //Firestore initial response
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(child: CircularProgressIndicator());
-                  }
-
-                  //if something is wrong from Firestore
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Text('Error loading tasks: ${snapshot.error}'),
+              child: Responsive.constrainWidth(
+                context,
+                child: StreamBuilder<User?>(
+                  stream: _authService.authStateChanges,
+                  initialData: _authService.currentUser,
+                  builder: (context, authSnap) {
+                    final uid = authSnap.data?.uid;
+                    return Column(
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 4),
+                          child: ListSwitcherBar(currentUid: uid ?? ''),
+                        ),
+                        Expanded(child: _buildTaskStream(uid)),
+                      ],
                     );
-                  }
-
-                  final tasks = snapshot.data ?? [];
-                  return tasks.isEmpty
-                      ? const _EmptyState()
-                      : _TaskList(tasks: tasks);
-                },
+                  },
+                ),
               ),
             ),
           ],
         ),
       ),
-
-      // The + button opens the add-task form as a popup (a "bottom sheet")
       floatingActionButton: const AppAddTaskFAB(),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: const AppBottomNav(currentTab: AppTab.tasks),
     );
   }
+
+  Widget _buildTaskStream(String? uid) {
+    return ValueListenableBuilder<String?>(
+      valueListenable: activeListId,
+      builder: (context, selectedListId, _) {
+        return StreamBuilder<List<Task>>(
+          key: ValueKey('${uid}_$selectedListId'),
+          stream: _firestoreService.streamTasks(listId: selectedListId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    TaskHelpers.friendlyError(
+                      snapshot.error!,
+                      fallback: 'Could not load tasks right now.',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.errorRed),
+                  ),
+                ),
+              );
+            }
+
+            final tasks = snapshot.data ?? [];
+            return tasks.isEmpty
+                ? const _EmptyState()
+                : _TaskList(
+                    tasks: tasks,
+                    firestoreService: _firestoreService,
+                  );
+          },
+        );
+      },
+    );
+  }
 }
 
-/// Greeting bar at the top: today's date, greeting, and a profile icon.
-
+// top banner with today's date and personalized greeting
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader();
+  final AuthService authService;
+
+  const _HomeHeader({required this.authService});
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
-
-    if (hour >= 0 && hour < 12) {
-      return 'Good morning, ';
-    } else if (hour >= 12 && hour < 18) {
-      return 'Good afternoon, ';
-    } else {
-      return 'Good evening, ';
-    }
+    if (hour >= 0 && hour < 12) return 'Good morning, ';
+    if (hour >= 12 && hour < 18) return 'Good afternoon, ';
+    return 'Good evening, ';
   }
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      color: const Color(0xFFFCE8CB),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return StreamBuilder<User?>(
+      stream: authService.userChanges,
+      initialData: authService.currentUser,
+      builder: (context, snapshot) {
+        final name = _firstName(snapshot.data);
+
+        return Container(
+          width: double.infinity,
+          padding: Responsive.headerPadding(context),
+          color: AppColors.creamHeader,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Text(
-                    _formattedDate(now).toUpperCase(),
-                    style: GoogleFonts.jetBrainsMono(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
+                  Flexible(
+                    child: Text(
+                      _formattedDate(now).toUpperCase(),
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                        fontSize: Responsive.isNarrow(context) ? 11.5 : 13,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),
                   const Icon(Icons.star, size: 16),
                 ],
               ),
+              const SizedBox(height: 5),
+              RichText(
+                text: TextSpan(
+                  style: GoogleFonts.dmSerifDisplay(
+                    fontSize: Responsive.headerTitleSize(context),
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                  children: [
+                    TextSpan(text: _getGreeting()),
+                    TextSpan(
+                      text: '$name.',
+                      style: const TextStyle(
+                        fontStyle: FontStyle.italic,
+                        color: AppColors.terracotta,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 5),
-
-          RichText(
-            text: TextSpan(
-              style: GoogleFonts.dmSerifDisplay(
-                fontSize: 30,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-              children: [
-                TextSpan(text: _getGreeting()),
-                TextSpan(
-                  text: 'Isk★.',
-                  style: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: Color(0xFFC65A42),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  // Formats a date like "Monday, September 7, 2026"
+  String _firstName(User? user) {
+    final full = user?.displayName?.trim() ?? '';
+    if (full.isEmpty) return 'there';
+    return full.split(' ').first;
+  }
+
   String _formattedDate(DateTime d) => DateFormat('EEEE, MMMM d, y').format(d);
 }
 
 class _TaskList extends StatelessWidget {
   final List<Task> tasks;
+  final FirestoreService firestoreService;
 
-  const _TaskList({required this.tasks});
-
-  // true if due today
-  bool _isToday(DateTime d) {
-    final now = DateTime.now();
-    return d.year == now.year && d.month == now.month && d.day == now.day;
-  }
-
-  // pushes done tasks to the bottom
-  List<Task> _withDoneAtBottom(List<Task> input) {
-    final notDone = input.where((t) => !t.isDone).toList();
-    final done = input.where((t) => t.isDone).toList()
-      ..sort((a, b) {
-        final aTime = a.completedAt ?? DateTime(0);
-        final bTime = b.completedAt ?? DateTime(0);
-        return aTime.compareTo(bTime);
-      });
-    return [...notDone, ...done];
-  }
+  const _TaskList({required this.tasks, required this.firestoreService});
 
   @override
   Widget build(BuildContext context) {
-    final todayTasks = _withDoneAtBottom(
-      tasks.where((t) => _isToday(t.dueDateTime)).toList(),
+    final now = DateTime.now();
+
+    // group tasks into 4 clear sections: Overdue, Today, Upcoming, and Completed
+    final overdueTasks = TaskHelpers.sortWithDoneAtBottom(
+      tasks.where((t) => TaskHelpers.isOverdue(t, now: now)).toList(),
     );
-    final otherTasks = _withDoneAtBottom(
-      tasks.where((t) => !_isToday(t.dueDateTime)).toList(),
+    final todayTasks = TaskHelpers.sortWithDoneAtBottom(
+      tasks
+          .where(
+            (t) =>
+                !t.isDone &&
+                !TaskHelpers.isOverdue(t, now: now) &&
+                TaskHelpers.isToday(t.dueDateTime, now: now),
+          )
+          .toList(),
+    );
+    final upcomingTasks = TaskHelpers.sortWithDoneAtBottom(
+      tasks
+          .where(
+            (t) => !t.isDone && TaskHelpers.isFutureDay(t.dueDateTime, now: now),
+          )
+          .toList(),
+    );
+    final completedTasks = TaskHelpers.sortWithDoneAtBottom(
+      tasks.where((t) => t.isDone).toList(),
     );
 
     return ListView(
       padding: const EdgeInsets.only(top: 8, bottom: 80),
       children: [
-        // section is skipped entirely (no empty header) when it has no tasks
+        if (overdueTasks.isNotEmpty) ...[
+          const _SectionHeader(title: 'Overdue', color: AppColors.errorRed),
+          ...overdueTasks.map((task) => _buildTaskCard(context, task)),
+        ],
         if (todayTasks.isNotEmpty) ...[
           const _SectionHeader(title: 'Today'),
           ...todayTasks.map((task) => _buildTaskCard(context, task)),
         ],
-        if (otherTasks.isNotEmpty) ...[
+        if (upcomingTasks.isNotEmpty) ...[
           const _SectionHeader(title: 'Upcoming Tasks'),
-          ...otherTasks.map((task) => _buildTaskCard(context, task)),
+          ...upcomingTasks.map((task) => _buildTaskCard(context, task)),
+        ],
+        if (completedTasks.isNotEmpty) ...[
+          const _SectionHeader(title: 'Completed Tasks'),
+          ...completedTasks.map((task) => _buildTaskCard(context, task)),
         ],
       ],
     );
@@ -186,72 +256,37 @@ class _TaskList extends StatelessWidget {
       key: ValueKey(task.id),
       task: task,
       onTap: () => showAddEditTaskSheet(context, existingTask: task),
-      onToggleDone: () async {
-        try {
-          await FirestoreService().toggleTaskDone(task);
-        } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Could not update task: $e')),
-            );
-          }
-        }
-      },
-      onDelete: () async {
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Delete this task?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-        );
-
-        if (confirmed != true) return;
-        if (!context.mounted) return; // guard the gap from the dialog's await
-
-        final messenger = ScaffoldMessenger.of(
-          context,
-        ); // capture BEFORE the await
-        await FirestoreService().softDelete(task);
-        messenger.showSnackBar(
-          SnackBar(
-            content: const Text('Task deleted'),
-            action: SnackBarAction(
-              label: 'Undo',
-              onPressed: () => FirestoreService().undoDelete(task),
-            ),
-          ),
-        );
-      },
+      onToggleDone: () => TaskHelpers.toggleTaskDone(
+        context,
+        task: task,
+        service: firestoreService,
+      ),
+      onDelete: () => TaskHelpers.confirmAndSoftDelete(
+        context,
+        task: task,
+        service: firestoreService,
+      ),
     );
   }
 }
 
-/// label group task ("Today" / "Other Tasks").
 class _SectionHeader extends StatelessWidget {
   final String title;
+  final Color color;
 
-  const _SectionHeader({required this.title});
+  const _SectionHeader({required this.title, this.color = AppColors.espresso});
 
   @override
   Widget build(BuildContext context) {
+    final hPad = Responsive.horizontalPadding(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 8),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.bold,
-          color: Color(0xFF4A3427),
+          color: color,
           letterSpacing: 0.5,
         ),
       ),
@@ -259,7 +294,6 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// What the user sees when there are no tasks.
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
 

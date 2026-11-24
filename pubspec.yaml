@@ -40,6 +40,7 @@ dependencies:
   intl: ^0.20.3
   syncfusion_flutter_calendar: ^34.2.6
   google_fonts: ^8.2.1
+  firebase_auth: ^6.7.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.1
@@ -65,7 +66,11 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
+  assets:
+      - assets/images/auth_bg.jpg
+      - assets/images/logo.png
+      - assets/images/app_title.png
+      - assets/images/ec.png
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
