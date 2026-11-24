@@ -84,6 +84,7 @@ IsKO-LATER is shipped as a standalone **Release Android `.apk`** (`flutter build
 ## 🖼️ App Screenshots
 
 ### 1. Authentication Flow
+<div align="center">
 <table>
   <tr>
     <th align="center">Login Screen</th>
@@ -91,13 +92,15 @@ IsKO-LATER is shipped as a standalone **Release Android `.apk`** (`flutter build
     <th align="center">Forgot Password</th>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/login_screen.jpg" alt="Login Screen" width="220" /></td>
-    <td align="center"><img src="screenshots/register_screen.jpg" alt="Register Screen" width="220" /></td>
-    <td align="center"><img src="screenshots/forgot_password_screen.jpg" alt="Forgot Password Screen" width="220" /></td>
+    <td align="center"><img src="screenshots/login_screen.jpg" alt="Login Screen" width="275" /></td>
+    <td align="center"><img src="screenshots/register_screen.jpg" alt="Register Screen" width="275" /></td>
+    <td align="center"><img src="screenshots/forgot_password_screen.jpg" alt="Forgot Password Screen" width="275" /></td>
   </tr>
 </table>
+</div>
 
 ### 2. Personal & Collaborative Task Lists
+<div align="center">
 <table>
   <tr>
     <th align="center">Personal To-Do List</th>
@@ -105,13 +108,15 @@ IsKO-LATER is shipped as a standalone **Release Android `.apk`** (`flutter build
     <th align="center">Shared Collaborative List</th>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/homeScreen_TaskList.jpg" alt="Home Screen Task List" width="220" /></td>
-    <td align="center"><img src="screenshots/list_switcher_dropdown.jpg" alt="List Switcher Dropdown" width="220" /></td>
-    <td align="center"><img src="screenshots/collab_list_tasks.jpg" alt="Collaborative List Tasks" width="220" /></td>
+    <td align="center"><img src="screenshots/homeScreen_TaskList.jpg" alt="Home Screen Task List" width="275" /></td>
+    <td align="center"><img src="screenshots/list_switcher_dropdown.jpg" alt="List Switcher Dropdown" width="275" /></td>
+    <td align="center"><img src="screenshots/collab_list_tasks.jpg" alt="Collaborative List Tasks" width="275" /></td>
   </tr>
 </table>
+</div>
 
 ### 3. Task & Collaborative Modal Sheets
+<div align="center">
 <table>
   <tr>
     <th align="center">Add / Edit Task Sheet</th>
@@ -119,27 +124,30 @@ IsKO-LATER is shipped as a standalone **Release Android `.apk`** (`flutter build
     <th align="center">Manage & Invite Members</th>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/Add_Edit_modal.jpg" alt="Add Edit Task Modal" width="220" /></td>
-    <td align="center"><img src="screenshots/create_collab_sheet.jpg" alt="Create Collab List Sheet" width="220" /></td>
-    <td align="center"><img src="screenshots/invite_members_sheet.jpg" alt="Invite Members Sheet" width="220" /></td>
+    <td align="center"><img src="screenshots/Add_Edit_modal.jpg" alt="Add Edit Task Modal" width="275" /></td>
+    <td align="center"><img src="screenshots/create_collab_sheet.jpg" alt="Create Collab List Sheet" width="275" /></td>
+    <td align="center"><img src="screenshots/invite_members_sheet.jpg" alt="Invite Members Sheet" width="275" /></td>
   </tr>
 </table>
+</div>
 
 ### 4. Calendar & Profile
+<div align="center">
 <table>
   <tr>
     <th align="center">Calendar View (Merged & Filtered)</th>
     <th align="center">Profile Screen</th>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/Calendar.jpg" alt="Calendar Screen" width="220" /></td>
-    <td align="center"><img src="screenshots/profile_screen.jpg" alt="Profile Screen" width="220" /></td>
+    <td align="center"><img src="screenshots/Calendar.jpg" alt="Calendar Screen" width="275" /></td>
+    <td align="center"><img src="screenshots/profile_screen.jpg" alt="Profile Screen" width="275" /></td>
   </tr>
 </table>
+</div>
 
 ### 5. Firebase Console (DB Inspection)
 <p align="center">
-  <img src="screenshots/firebase_inspection.jpg" alt="Firestore Database Inspection" width="700" />
+  <img src="screenshots/firebase_inspection.jpg" alt="Firestore Database Inspection" width="100%" />
 </p>
 
 ---
